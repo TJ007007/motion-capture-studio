@@ -36,10 +36,11 @@ export class Application {
    * Bootstrap DOM-dependent systems.
    */
   async init() {
+    this.ui = new UIManager(this);
+
     const viewport = document.getElementById('viewport');
     if (!viewport) throw new Error('Viewport element not found.');
 
-    this.ui = new UIManager(this);
     this.renderer = new SceneRenderer(viewport, this.bus);
 
     const s = this.settings.settings;
