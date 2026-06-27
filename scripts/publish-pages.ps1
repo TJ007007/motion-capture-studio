@@ -17,6 +17,16 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+function Get-GhExe {
+    $cmd = Get-Command gh -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
+    $default = "${env:ProgramFiles}\GitHub CLI\gh.exe"
+    if (Test-Path $default) { return $default }
+    throw "GitHub CLI (gh) not found. Install from https://cli.github.com/ or restart your terminal after installing."
+}
+
+$Gh = Get-GhExe
 $RepoName = if ($SiteType -eq "user") { "$GitHubUser.github.io" } else { "motion-capture-studio" }
 $LiveUrl = if ($SiteType -eq "user") { "https://$GitHubUser.github.io/" } else { "https://$GitHubUser.github.io/$RepoName/" }
 
@@ -25,18 +35,20 @@ Write-Host "Repository:  $GitHubUser/$RepoName"
 Write-Host "Live URL:    $LiveUrl"
 Write-Host ""
 
-gh auth status | Out-Null
+& $Gh auth status | Out-Null
 
-if (git remote get-url origin 2>$null) {
+$remotes = @(git remote 2>$null)
+if ($remotes -contains 'origin') {
     Write-Host "Remote 'origin' already exists."
 } else {
-    gh repo create $RepoName --public --source=. --remote=origin --description "Professional IMU motion capture and analysis — GitHub Pages app"
+    & $Gh repo create $RepoName --public --source=. --remote=origin -d "Motion Capture Studio GitHub Pages app"
+    if ($LASTEXITCODE -ne 0) { throw "Failed to create GitHub repository $GitHubUser/$RepoName" }
     Write-Host "Created repository $GitHubUser/$RepoName"
 }
 
 git push -u origin main
 
-gh api "repos/$GitHubUser/$RepoName/pages" -X POST -f "build_type=workflow" -f "source[branch]=main" -f "source[path]=/" 2>$null
+& $Gh api "repos/$GitHubUser/$RepoName/pages" -X POST -f "build_type=workflow" -f "source[branch]=main" -f "source[path]=/" 2>$null
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Pages may already be enabled — check Settings > Pages > GitHub Actions."
 }
