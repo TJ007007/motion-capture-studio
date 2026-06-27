@@ -1391,7 +1391,7 @@ class MadgwickFilter {
     if (norm === 0) return;
     ax /= norm; ay /= norm; az /= norm;
 
-    const q1 = this.q.w, q2 = this.q.x, q3 = this.q.y, q4 = this.q.z;
+    let q1 = this.q.w, q2 = this.q.x, q3 = this.q.y, q4 = this.q.z;
     const _2q1 = 2 * q1, _2q2 = 2 * q2, _2q3 = 2 * q3, _2q4 = 2 * q4;
     const _4q1 = 4 * q1, _4q2 = 4 * q2, _4q3 = 4 * q3;
     const _8q2 = 8 * q2, _8q3 = 8 * q3;
