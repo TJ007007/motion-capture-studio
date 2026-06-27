@@ -1,0 +1,11 @@
+{
+  "name": "motion-capture-studio",
+  "version": "1.0.0",
+  "description": "Professional IMU motion capture and analysis application",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/build.mjs"
+  },
+  "license": "MIT"
+}

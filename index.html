@@ -1,0 +1,4449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="description" content="Motion Capture Studio — professional IMU motion capture and analysis">
+  <title>Motion Capture Studio</title>
+  <style>
+/**
+ * Motion Capture Studio — global styles
+ * Dark glassmorphism engineering UI with neon cyan accents.
+ */
+
+:root {
+  --accent: #00e5ff;
+  --accent-dim: #00b8cc;
+  --bg-deep: #0a0e14;
+  --bg-panel: rgba(16, 22, 32, 0.72);
+  --text: #e6edf5;
+  --text-muted: #8b9cb3;
+  --border: rgba(0, 229, 255, 0.18);
+  --glow: 0 0 24px rgba(0, 229, 255, 0.35);
+  --radius: 10px;
+  --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --menubar-h: 36px;
+  --toolbar-h: 42px;
+  --status-h: 26px;
+  --timeline-h: 72px;
+  --panel-w: 260px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  font-family: var(--font);
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg-deep);
+  background-image:
+    radial-gradient(ellipse at 20% 0%, rgba(0, 229, 255, 0.06) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 100%, rgba(0, 100, 140, 0.08) 0%, transparent 40%);
+}
+
+#app {
+  display: grid;
+  grid-template-rows: var(--menubar-h) var(--toolbar-h) 1fr var(--timeline-h) var(--status-h);
+  height: 100vh;
+  width: 100vw;
+}
+
+.glass {
+  background: var(--bg-panel);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  border: 1px solid var(--border);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+/* Menu bar */
+.menubar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--border);
+  z-index: 100;
+}
+
+.logo {
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+  text-shadow: var(--glow);
+  white-space: nowrap;
+}
+
+.menu { display: flex; gap: 2px; flex-wrap: wrap; }
+.menu button {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.menu button:hover { color: var(--accent); background: rgba(0, 229, 255, 0.08); }
+
+.unsaved-indicator { color: #ffb347; font-size: 11px; margin-left: auto; }
+.unsaved-indicator.hidden { display: none; }
+
+/* Toolbar */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+}
+
+.tb-btn {
+  background: rgba(0, 229, 255, 0.08);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 5px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.15s;
+}
+.tb-btn:hover { border-color: var(--accent); box-shadow: var(--glow); }
+.tb-btn.accent { background: rgba(0, 229, 255, 0.2); color: var(--accent); }
+.tb-btn.block { display: block; width: 100%; margin-bottom: 6px; text-align: left; }
+.tb-sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
+.tb-label { font-size: 11px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
+
+select, input[type="range"] {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+/* Workspace */
+.workspace {
+  display: grid;
+  grid-template-columns: var(--panel-w) 1fr var(--panel-w);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  border-right: 1px solid var(--border);
+}
+.panel.right { border-right: none; border-left: 1px solid var(--border); }
+.panel h3, .panel h4 { padding: 10px 12px 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); }
+.panel-body { padding: 8px 12px; overflow-y: auto; flex: 1; }
+
+.resize-handle {
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 4px;
+  cursor: ew-resize;
+  right: 0;
+  z-index: 10;
+}
+.resize-handle.right { right: auto; left: 0; }
+
+.viewport-wrap {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+#viewport {
+  width: 100%;
+  height: 100%;
+  min-height: 200px;
+}
+#viewport canvas { display: block; width: 100% !important; height: 100% !important; }
+
+.viewport-overlay {
+  position: absolute;
+  top: 8px; left: 8px;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  z-index: 5;
+}
+
+/* Side panel tabs */
+.tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.tab {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  padding: 8px 4px;
+  font-size: 11px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab-panel { display: none; flex: 1; overflow-y: auto; min-height: 0; }
+.tab-panel.active { display: flex; flex-direction: column; }
+
+.stats-grid { padding: 8px 12px; display: grid; gap: 4px; }
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.2);
+  font-size: 12px;
+}
+.stat-row strong { color: var(--accent); }
+
+.graph-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  padding: 6px;
+  overflow-y: auto;
+}
+.graph-cell {
+  height: 90px;
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.graph-cell canvas { width: 100%; height: 100%; display: block; }
+
+.settings-form {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.settings-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.debug-pre {
+  padding: 10px;
+  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-size: 10px;
+  line-height: 1.4;
+  overflow: auto;
+  flex: 1;
+  color: #7fdbca;
+}
+
+.recent-list { list-style: none; padding: 0 12px; }
+.recent-list li { padding: 4px 0; font-size: 11px; color: var(--text-muted); }
+.recent-list .muted { font-style: italic; }
+
+/* Timeline */
+.timeline-bar {
+  border-top: 1px solid var(--border);
+  min-height: var(--timeline-h);
+  position: relative;
+}
+#timeline-canvas { width: 100%; height: 100%; display: block; cursor: crosshair; }
+
+/* Status bar */
+.statusbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+}
+
+/* Toasts */
+.toast-container {
+  position: fixed;
+  bottom: calc(var(--status-h) + var(--timeline-h) + 12px);
+  right: 12px;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+.toast {
+  padding: 10px 16px;
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(12px);
+  color: var(--text);
+  font-size: 13px;
+  opacity: 0;
+  transform: translateX(20px);
+  transition: all 0.3s;
+  pointer-events: auto;
+  max-width: 360px;
+  box-shadow: var(--glow);
+}
+.toast.visible { opacity: 1; transform: translateX(0); }
+.toast-success { border-color: rgba(0, 200, 120, 0.5); }
+.toast-error { border-color: rgba(255, 68, 68, 0.5); }
+.toast-warning { border-color: rgba(255, 179, 71, 0.5); }
+
+/* Command palette */
+.cmd-palette {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 20000;
+  display: none;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+}
+.cmd-palette.visible { display: flex; }
+.cmd-box {
+  width: min(560px, 92vw);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--glow);
+}
+.cmd-input {
+  width: 100%;
+  padding: 14px 16px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-size: 15px;
+  outline: none;
+}
+.cmd-close {
+  position: absolute;
+  right: 12px; top: 10px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 20px;
+  cursor: pointer;
+}
+.cmd-list { max-height: 360px; overflow-y: auto; }
+.cmd-item {
+  display: flex;
+  width: 100%;
+  padding: 10px 16px;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  gap: 8px;
+}
+.cmd-item:hover { background: rgba(0, 229, 255, 0.1); }
+.cmd-label { flex: 1; }
+.cmd-cat, .cmd-key { font-size: 11px; color: var(--text-muted); }
+
+/* Modal */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 15000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.modal-box {
+  width: min(480px, 92vw);
+  padding: 24px;
+  border-radius: var(--radius);
+  box-shadow: var(--glow);
+}
+.modal-box h2 { color: var(--accent); margin-bottom: 12px; }
+.modal-box p { margin-bottom: 8px; line-height: 1.5; }
+.modal-actions { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+.muted { color: var(--text-muted); font-size: 12px; }
+
+/* Context menu */
+.context-menu {
+  position: fixed;
+  z-index: 12000;
+  min-width: 160px;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: var(--glow);
+}
+.context-menu.hidden { display: none; }
+.ctx-item {
+  display: block;
+  width: 100%;
+  padding: 8px 14px;
+  background: var(--bg-panel);
+  border: none;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  font-size: 12px;
+}
+.ctx-item:hover { background: rgba(0, 229, 255, 0.12); }
+.ctx-item:disabled { opacity: 0.4; cursor: default; }
+
+/* Loading */
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 14, 20, 0.85);
+  z-index: 30000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+.loading-overlay.hidden { display: none; }
+.spinner {
+  width: 40px; height: 40px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.drag-over { outline: 2px dashed var(--accent); outline-offset: -4px; }
+
+.fatal-error {
+  margin: 40px auto;
+  max-width: 480px;
+  padding: 24px;
+  border-radius: var(--radius);
+  text-align: center;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .workspace { grid-template-columns: 200px 1fr 220px; }
+}
+
+@media (max-width: 768px) {
+  .workspace {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr auto;
+  }
+  .panel.left { display: none; }
+  .panel.right {
+    max-height: 40vh;
+    border-left: none;
+    border-top: 1px solid var(--border);
+  }
+  :root { --panel-w: 100%; }
+}
+
+@media (max-width: 480px) {
+  .menu { display: none; }
+  .toolbar { gap: 4px; }
+  .tb-btn { padding: 4px 6px; font-size: 11px; }
+}
+
+[data-theme="light"] {
+  --bg-deep: #e8ecf0;
+  --bg-panel: rgba(255, 255, 255, 0.85);
+  --text: #1a2332;
+  --text-muted: #5a6a7a;
+  --glow: none;
+}
+
+</style>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="toasts" class="toast-container" aria-live="polite"></div>
+  <script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+  <script type="module">
+/**
+ * Central publish/subscribe event dispatcher for decoupled subsystems.
+ * @module core/EventBus
+ */
+
+/**
+ * @typedef {Object} EventBusOptions
+ * @property {number} [maxHistory=200] Max command history entries for undo/redo (future).
+ */
+
+/**
+ * Typed event bus with wildcard support and one-shot listeners.
+ */
+class EventBus {
+  /** @param {EventBusOptions} [options] */
+  constructor(options = {}) {
+    /** @private @type {Map<string, Set<Function>>} */
+    this._listeners = new Map();
+    /** @private @type {string[]} */
+    this._history = [];
+    this._maxHistory = options.maxHistory ?? 200;
+  }
+
+  /**
+   * Subscribe to an event.
+   * @param {string} event
+   * @param {Function} handler
+   * @returns {() => void} Unsubscribe function
+   */
+  on(event, handler) {
+    if (!this._listeners.has(event)) this._listeners.set(event, new Set());
+    this._listeners.get(event).add(handler);
+    return () => this.off(event, handler);
+  }
+
+  /**
+   * Subscribe once.
+   * @param {string} event
+   * @param {Function} handler
+   */
+  once(event, handler) {
+    const wrap = (...args) => {
+      this.off(event, wrap);
+      handler(...args);
+    };
+    this.on(event, wrap);
+  }
+
+  /**
+   * Unsubscribe handler.
+   * @param {string} event
+   * @param {Function} handler
+   */
+  off(event, handler) {
+    this._listeners.get(event)?.delete(handler);
+  }
+
+  /**
+   * Emit event to listeners and wildcard subscribers.
+   * @param {string} event
+   * @param {*} [payload]
+   */
+  emit(event, payload) {
+    this._history.push(event);
+    if (this._history.length > this._maxHistory) this._history.shift();
+
+    const targets = [event, '*'];
+    for (const key of targets) {
+      const set = this._listeners.get(key);
+      if (!set) continue;
+      for (const fn of [...set]) {
+        try {
+          fn(payload, event);
+        } catch (err) {
+          console.error(`EventBus handler error [${event}]:`, err);
+          this.emit('error', { source: 'EventBus', event, error: err });
+        }
+      }
+    }
+  }
+
+  /** Clear all listeners. */
+  clear() {
+    this._listeners.clear();
+  }
+}
+
+EventBus;
+
+
+/**
+ * Future-ready plugin registration API.
+ * @module core/PluginAPI
+ */
+
+/**
+ * @typedef {Object} PluginDescriptor
+ * @property {string} id
+ * @property {string} name
+ * @property {string} version
+ * @property {(app: import('./Application.js').Application) => void} [onRegister]
+ * @property {() => void} [onUnregister]
+ */
+
+class PluginAPI {
+  constructor() {
+    /** @type {Map<string, PluginDescriptor>} */
+    this._plugins = new Map();
+  }
+
+  /**
+   * @param {PluginDescriptor} plugin
+   * @param {import('./Application.js').Application} app
+   */
+  register(plugin, app) {
+    if (this._plugins.has(plugin.id)) {
+      throw new Error(`Plugin already registered: ${plugin.id}`);
+    }
+    this._plugins.set(plugin.id, plugin);
+    plugin.onRegister?.(app);
+  }
+
+  /**
+   * @param {string} id
+   */
+  unregister(id) {
+    const p = this._plugins.get(id);
+    p?.onUnregister?.();
+    this._plugins.delete(id);
+  }
+
+  /** @returns {PluginDescriptor[]} */
+  list() {
+    return [...this._plugins.values()];
+  }
+}
+
+PluginAPI;
+
+
+/**
+ * Persistent application settings via localStorage with CSS variable theming.
+ * @module settings/SettingsManager
+ */
+
+/** @typedef {Object} AppSettings */
+/** @typedef {'dark'|'light'} ThemeName */
+/** @typedef {'line'|'ribbon'|'heatmap'|'ghost'} TrailMode */
+/** @typedef {'orbit'|'free'|'follow'} CameraMode */
+/** @typedef {'raw'|'madgwick'} FilterMode */
+/** @typedef {'ms2'|'g'} AccelUnits */
+
+const STORAGE_KEY = 'mcs_settings_v1';
+
+/** @type {AppSettings} */
+const DEFAULTS = {
+  theme: 'dark',
+  gridVisible: true,
+  shadowsEnabled: true,
+  bloomEnabled: true,
+  trailMode: 'line',
+  phoneWireframe: false,
+  playbackSpeed: 1,
+  sampleRate: 60,
+  cameraMode: 'orbit',
+  motionSmoothing: 0.15,
+  filterMode: 'madgwick',
+  accelUnits: 'ms2',
+  graphVisibility: {
+    accelX: true, accelY: true, accelZ: true,
+    gyroX: true, gyroY: true, gyroZ: true,
+    velocity: true, position: true, distance: true,
+    rotationSpeed: true, gForce: true, fft: true,
+  },
+  panelLayout: {},
+  shortcuts: {},
+  autoFollowSmoothing: 0.08,
+  highDpi: true,
+};
+
+class SettingsManager {
+  /**
+   * @param {import('../core/EventBus.js').EventBus} bus
+   */
+  constructor(bus) {
+    this.bus = bus;
+    /** @type {AppSettings} */
+    this.settings = this._load();
+    this._applyTheme();
+  }
+
+  /** @returns {AppSettings} */
+  _load() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return structuredClone(DEFAULTS);
+      return { ...structuredClone(DEFAULTS), ...JSON.parse(raw) };
+    } catch {
+      return structuredClone(DEFAULTS);
+    }
+  }
+
+  /** Persist settings. */
+  save() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(this.settings));
+    this.bus.emit('settings:changed', this.settings);
+  }
+
+  /**
+   * @template {keyof AppSettings} K
+   * @param {K} key
+   * @returns {AppSettings[K]}
+   */
+  get(key) {
+    return this.settings[key];
+  }
+
+  /**
+   * @template {keyof AppSettings} K
+   * @param {K} key
+   * @param {AppSettings[K]} value
+   */
+  set(key, value) {
+    this.settings[key] = value;
+    if (key === 'theme') this._applyTheme();
+    this.save();
+  }
+
+  /** Apply CSS custom properties for active theme. */
+  _applyTheme() {
+    const root = document.documentElement;
+    const dark = this.settings.theme !== 'light';
+    root.dataset.theme = dark ? 'dark' : 'light';
+    root.style.setProperty('--accent', '#00e5ff');
+    root.style.setProperty('--accent-dim', '#00b8cc');
+    root.style.setProperty('--bg-deep', dark ? '#0a0e14' : '#e8ecf0');
+    root.style.setProperty('--bg-panel', dark ? 'rgba(16, 22, 32, 0.72)' : 'rgba(255,255,255,0.85)');
+    root.style.setProperty('--text', dark ? '#e6edf5' : '#1a2332');
+    root.style.setProperty('--text-muted', dark ? '#8b9cb3' : '#5a6a7a');
+    root.style.setProperty('--border', dark ? 'rgba(0, 229, 255, 0.18)' : 'rgba(0, 120, 140, 0.2)');
+    root.style.setProperty('--glow', dark ? '0 0 24px rgba(0, 229, 255, 0.35)' : 'none');
+  }
+
+  reset() {
+    this.settings = structuredClone(DEFAULTS);
+    this._applyTheme();
+    this.save();
+  }
+}
+
+SettingsManager;
+
+
+/**
+ * Device motion sensor capture with permission handling.
+ * @module sensors/SensorManager
+ */
+
+/** @typedef {30|60|120} SampleRateHz */
+
+/**
+ * Wraps DeviceMotion / DeviceOrientation APIs.
+ */
+class SensorManager {
+  /**
+   * @param {import('../core/EventBus.js').EventBus} bus
+   */
+  constructor(bus) {
+    this.bus = bus;
+    this.active = false;
+    /** @type {SampleRateHz} */
+    this.targetRate = 60;
+    this._lastTs = 0;
+    this._interval = null;
+    this._latest = null;
+    this.availability = this._detectAvailability();
+  }
+
+  _detectAvailability() {
+    const hasMotion = typeof window !== 'undefined' && 'DeviceMotionEvent' in window;
+    const hasOrient = typeof window !== 'undefined' && 'DeviceOrientationEvent' in window;
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    return {
+      accelerometer: hasMotion,
+      gyroscope: hasMotion,
+      orientation: hasOrient,
+      permissionRequired: isIOS && typeof DeviceMotionEvent?.requestPermission === 'function',
+      browser: navigator.userAgent,
+      platform: navigator.platform,
+    };
+  }
+
+  /**
+   * Request sensor permissions (iOS).
+   * @returns {Promise<boolean>}
+   */
+  async requestPermission() {
+    try {
+      if (this.availability.permissionRequired) {
+        // @ts-ignore
+        const r = await DeviceMotionEvent.requestPermission();
+        return r === 'granted';
+      }
+      return this.availability.accelerometer;
+    } catch (err) {
+      this.bus.emit('error', { code: 'PERMISSION_DENIED', message: 'Sensor permission denied.', error: err });
+      return false;
+    }
+  }
+
+  /**
+   * @param {SampleRateHz} rate
+   */
+  setSampleRate(rate) {
+    this.targetRate = rate;
+  }
+
+  /**
+   * Start capturing sensor data.
+   * @returns {Promise<boolean>}
+   */
+  async start() {
+    if (!this.availability.accelerometer) {
+      this.bus.emit('error', { code: 'UNSUPPORTED', message: 'Device motion sensors are not available in this browser.' });
+      return false;
+    }
+    const ok = await this.requestPermission();
+    if (!ok) return false;
+
+    this._onMotion = this._onMotion.bind(this);
+    window.addEventListener('devicemotion', this._onMotion, { passive: true });
+    this.active = true;
+    this._lastTs = performance.now();
+    this.bus.emit('sensors:started');
+    return true;
+  }
+
+  stop() {
+    if (!this.active) return;
+    window.removeEventListener('devicemotion', this._onMotion);
+    this.active = false;
+    this.bus.emit('sensors:stopped');
+  }
+
+  /**
+   * @param {DeviceMotionEvent} e
+   * @private
+   */
+  _onMotion(e) {
+    const now = performance.now();
+    const dt = this._lastTs ? (now - this._lastTs) / 1000 : 1 / this.targetRate;
+    this._lastTs = now;
+
+    const acc = e.accelerationIncludingGravity ?? e.acceleration;
+    const rot = e.rotationRate;
+    if (!acc) return;
+
+    const GRAVITY_MS2 = 9.80665;
+    const accel = {
+      x: (acc.x ?? 0) * GRAVITY_MS2,
+      y: (acc.y ?? 0) * GRAVITY_MS2,
+      z: (acc.z ?? 0) * GRAVITY_MS2,
+    };
+    const gyro = {
+      x: ((rot?.alpha ?? 0) * Math.PI) / 180,
+      y: ((rot?.beta ?? 0) * Math.PI) / 180,
+      z: ((rot?.gamma ?? 0) * Math.PI) / 180,
+    };
+
+    let orientation = null;
+    if (e.absolute && typeof e.alpha === 'number') {
+      // Some browsers expose orientation on motion event
+    }
+
+    const sample = {
+      timestamp: now,
+      dt: Math.max(dt, 1e-6),
+      accel,
+      gyro,
+      orientation,
+      raw: { accel: { ...accel }, gyro: { ...gyro } },
+    };
+    this._latest = sample;
+    this.bus.emit('sensor:sample', sample);
+  }
+
+  /** @returns {Object|null} */
+  getLatest() {
+    return this._latest;
+  }
+}
+
+SensorManager;
+
+
+/**
+ * Math utilities for motion capture: vectors, quaternions, interpolation.
+ * @module utils/math
+ */
+
+/** @typedef {{ x: number, y: number, z: number }} Vec3 */
+/** @typedef {{ w: number, x: number, y: number, z: number }} Quat */
+
+const DEG2RAD = Math.PI / 180;
+const RAD2DEG = 180 / Math.PI;
+const GRAVITY = 9.80665;
+
+/**
+ * @param {number} [x]
+ * @param {number} [y]
+ * @param {number} [z]
+ * @returns {Vec3}
+ */
+function vec3(x = 0, y = 0, z = 0) {
+  return { x, y, z };
+}
+
+/**
+ * @param {Vec3} a
+ * @param {Vec3} b
+ * @returns {Vec3}
+ */
+function vec3Add(a, b) {
+  return { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z };
+}
+
+/**
+ * @param {Vec3} a
+ * @param {number} s
+ * @returns {Vec3}
+ */
+function vec3Scale(a, s) {
+  return { x: a.x * s, y: a.y * s, z: a.z * s };
+}
+
+/**
+ * @param {Vec3} a
+ * @param {Vec3} b
+ * @returns {number}
+ */
+function vec3Dot(a, b) {
+  return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+/**
+ * @param {Vec3} a
+ * @returns {number}
+ */
+function vec3Length(a) {
+  return Math.hypot(a.x, a.y, a.z);
+}
+
+/**
+ * @param {Vec3} a
+ * @returns {Vec3}
+ */
+function vec3Normalize(a) {
+  const len = vec3Length(a) || 1;
+  return vec3Scale(a, 1 / len);
+}
+
+/**
+ * @param {Vec3} a
+ * @param {Vec3} b
+ * @returns {Vec3}
+ */
+function vec3Sub(a, b) {
+  return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z };
+}
+
+/**
+ * @param {number} [w]
+ * @param {number} [x]
+ * @param {number} [y]
+ * @param {number} [z]
+ * @returns {Quat}
+ */
+function quat(w = 1, x = 0, y = 0, z = 0) {
+  return { w, x, y, z };
+}
+
+/**
+ * @param {Quat} q
+ * @returns {Quat}
+ */
+function quatNormalize(q) {
+  const len = Math.hypot(q.w, q.x, q.y, q.z) || 1;
+  return { w: q.w / len, x: q.x / len, y: q.y / len, z: q.z / len };
+}
+
+/**
+ * Spherical linear interpolation between quaternions.
+ * @param {Quat} a
+ * @param {Quat} b
+ * @param {number} t
+ * @returns {Quat}
+ */
+function quatSlerp(a, b, t) {
+  let dot = a.w * b.w + a.x * b.x + a.y * b.y + a.z * b.z;
+  let bx = b.x, by = b.y, bz = b.z, bw = b.w;
+  if (dot < 0) {
+    dot = -dot;
+    bx = -bx; by = -by; bz = -bz; bw = -bw;
+  }
+  if (dot > 0.9995) {
+    return quatNormalize({
+      w: a.w + t * (bw - a.w),
+      x: a.x + t * (bx - a.x),
+      y: a.y + t * (by - a.y),
+      z: a.z + t * (bz - a.z),
+    });
+  }
+  const theta = Math.acos(dot);
+  const sinTheta = Math.sin(theta);
+  const wa = Math.sin((1 - t) * theta) / sinTheta;
+  const wb = Math.sin(t * theta) / sinTheta;
+  return {
+    w: wa * a.w + wb * bw,
+    x: wa * a.x + wb * bx,
+    y: wa * a.y + wb * by,
+    z: wa * a.z + wb * bz,
+  };
+}
+
+/**
+ * Rotate vector by quaternion.
+ * @param {Quat} q
+ * @param {Vec3} v
+ * @returns {Vec3}
+ */
+function quatRotateVec(q, v) {
+  const qx = q.x, qy = q.y, qz = q.z, qw = q.w;
+  const ix = qw * v.x + qy * v.z - qz * v.y;
+  const iy = qw * v.y + qz * v.x - qx * v.z;
+  const iz = qw * v.z + qx * v.y - qy * v.x;
+  const iw = -qx * v.x - qy * v.y - qz * v.z;
+  return {
+    x: ix * qw + iw * -qx + iy * -qz - iz * -qy,
+    y: iy * qw + iw * -qy + iz * -qx - ix * -qz,
+    z: iz * qw + iw * -qz + ix * -qy - iy * -qx,
+  };
+}
+
+/**
+ * Quaternion to Euler angles (XYZ order) in radians.
+ * @param {Quat} q
+ * @returns {Vec3}
+ */
+function quatToEuler(q) {
+  const sinr = 2 * (q.w * q.x + q.y * q.z);
+  const cosr = 1 - 2 * (q.x * q.x + q.y * q.y);
+  const roll = Math.atan2(sinr, cosr);
+  const sinp = 2 * (q.w * q.y - q.z * q.x);
+  const pitch = Math.abs(sinp) >= 1 ? Math.sign(sinp) * Math.PI / 2 : Math.asin(sinp);
+  const siny = 2 * (q.w * q.z + q.x * q.y);
+  const cosy = 1 - 2 * (q.y * q.y + q.z * q.z);
+  const yaw = Math.atan2(siny, cosy);
+  return { x: roll, y: pitch, z: yaw };
+}
+
+/**
+ * Linear interpolation.
+ * @param {number} a
+ * @param {number} b
+ * @param {number} t
+ * @returns {number}
+ */
+function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
+
+/**
+ * Catmull-Rom spline interpolation for smooth paths.
+ * @param {Vec3} p0
+ * @param {Vec3} p1
+ * @param {Vec3} p2
+ * @param {Vec3} p3
+ * @param {number} t
+ * @returns {Vec3}
+ */
+function catmullRom(p0, p1, p2, p3, t) {
+  const t2 = t * t;
+  const t3 = t2 * t;
+  const f = (i) => ({
+    x: 0.5 * ((2 * p1[i]) + (-p0[i] + p2[i]) * t + (2 * p0[i] - 5 * p1[i] + 4 * p2[i] - p3[i]) * t2 + (-p0[i] + 3 * p1[i] - 3 * p2[i] + p3[i]) * t3),
+    y: 0,
+    z: 0,
+  });
+  return {
+    x: 0.5 * ((2 * p1.x) + (-p0.x + p2.x) * t + (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 + (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3),
+    y: 0.5 * ((2 * p1.y) + (-p0.y + p2.y) * t + (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 + (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3),
+    z: 0.5 * ((2 * p1.z) + (-p0.z + p2.z) * t + (2 * p0.z - 5 * p1.z + 4 * p2.z - p3.z) * t2 + (-p0.z + 3 * p1.z - 3 * p2.z + p3.z) * t3),
+  };
+}
+
+/**
+ * In-place radix-2 Cooley-Tukey FFT (real input).
+ * @param {Float32Array} re
+ * @param {Float32Array} im
+ */
+function fft(re, im) {
+  const n = re.length;
+  if (n <= 1) return;
+  let j = 0;
+  for (let i = 0; i < n; i++) {
+    if (i < j) {
+      [re[i], re[j]] = [re[j], re[i]];
+      [im[i], im[j]] = [im[j], im[i]];
+    }
+    let m = n >> 1;
+    while (m >= 1 && j >= m) { j -= m; m >>= 1; }
+    j += m;
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = (-2 * Math.PI) / len;
+    const wlenRe = Math.cos(ang);
+    const wlenIm = Math.sin(ang);
+    for (let i = 0; i < n; i += len) {
+      let wRe = 1, wIm = 0;
+      for (let k = 0; k < len / 2; k++) {
+        const uRe = re[i + k], uIm = im[i + k];
+        const vRe = re[i + k + len / 2] * wRe - im[i + k + len / 2] * wIm;
+        const vIm = re[i + k + len / 2] * wIm + im[i + k + len / 2] * wRe;
+        re[i + k] = uRe + vRe;
+        im[i + k] = uIm + vIm;
+        re[i + k + len / 2] = uRe - vRe;
+        im[i + k + len / 2] = uIm - vIm;
+        const nwRe = wRe * wlenRe - wIm * wlenIm;
+        wIm = wRe * wlenIm + wIm * wlenRe;
+        wRe = nwRe;
+      }
+    }
+  }
+}
+
+/**
+ * Next power of two >= n.
+ * @param {number} n
+ * @returns {number}
+ */
+function nextPow2(n) {
+  let p = 1;
+  while (p < n) p <<= 1;
+  return p;
+}
+
+/**
+ * Clamp value.
+ * @param {number} v
+ * @param {number} min
+ * @param {number} max
+ * @returns {number}
+ */
+function clamp(v, min, max) {
+  return Math.max(min, Math.min(max, v));
+}
+
+/**
+ * Format bytes for display.
+ * @param {number} bytes
+ * @returns {string}
+ */
+function formatBytes(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1048576).toFixed(2)} MB`;
+}
+
+
+/**
+ * Madgwick AHRS sensor fusion filter.
+ * @see http://www.x-io.co.uk/open-source-imu-and-ahrs-algorithms/
+ * @module motion/MadgwickFilter
+ */
+
+
+/**
+ * Madgwick IMU fusion with gyro + accelerometer.
+ */
+class MadgwickFilter {
+  /**
+   * @param {number} [sampleRate=60]
+   * @param {number} [beta=0.1] Filter gain
+   */
+  constructor(sampleRate = 60, beta = 0.1) {
+    this.sampleRate = sampleRate;
+    this.beta = beta;
+    /** @type {import('../utils/math.js').Quat} */
+    this.q = quat(1, 0, 0, 0);
+    this.gravityRef = { x: 0, y: 0, z: 1 };
+    /** @type {import('../utils/math.js').Vec3|null} */
+    this.linearAccel = null;
+    this.smoothing = 0.15;
+    /** @type {import('../utils/math.js').Vec3} */
+    this._smoothVel = { x: 0, y: 0, z: 0 };
+    /** @type {import('../utils/math.js').Vec3} */
+    this.position = { x: 0, y: 0, z: 0 };
+    /** @type {import('../utils/math.js').Vec3} */
+    this.velocity = { x: 0, y: 0, z: 0 };
+    this.driftCorrection = 0.002;
+  }
+
+  /**
+   * @param {number} rate
+   */
+  setSampleRate(rate) {
+    this.sampleRate = rate;
+  }
+
+  /**
+   * @param {number} beta
+   */
+  setBeta(beta) {
+    this.beta = beta;
+  }
+
+  reset() {
+    this.q = quat(1, 0, 0, 0);
+    this.position = { x: 0, y: 0, z: 0 };
+    this.velocity = { x: 0, y: 0, z: 0 };
+    this._smoothVel = { x: 0, y: 0, z: 0 };
+  }
+
+  /**
+   * Update orientation from gyro (rad/s) and accel (m/s²).
+   * @param {{ x: number, y: number, z: number }} gyro
+   * @param {{ x: number, y: number, z: number }} accel
+   * @param {number} dt
+   */
+  update(gyro, accel, dt) {
+    const gx = gyro.x, gy = gyro.y, gz = gyro.z;
+    let ax = accel.x, ay = accel.y, az = accel.z;
+    const norm = Math.hypot(ax, ay, az);
+    if (norm === 0) return;
+    ax /= norm; ay /= norm; az /= norm;
+
+    const q1 = this.q.w, q2 = this.q.x, q3 = this.q.y, q4 = this.q.z;
+    const _2q1 = 2 * q1, _2q2 = 2 * q2, _2q3 = 2 * q3, _2q4 = 2 * q4;
+    const _4q1 = 4 * q1, _4q2 = 4 * q2, _4q3 = 4 * q3;
+    const _8q2 = 8 * q2, _8q3 = 8 * q3;
+    const q1q1 = q1 * q1, q2q2 = q2 * q2, q3q3 = q3 * q3, q4q4 = q4 * q4;
+
+    let s1 = _4q1 * q3q3 + _2q3 * ax + _4q1 * q2q2 - _2q2 * ay;
+    let s2 = _4q2 * q4q4 - _2q4 * ax + 4 * q1q1 * q2 - _2q1 * ay - _4q2 + _8q2 * q2q2 + _8q2 * q3q3 + _4q2 * az;
+    let s3 = 4 * q1q1 * q3 + _2q1 * ax + _4q3 * q4q4 - _2q4 * ay - _4q3 + _8q3 * q2q2 + _8q3 * q3q3 + _4q3 * az;
+    let s4 = 4 * q2q2 * q4 - _2q2 * ax + 4 * q3q3 * q4 - _2q3 * ay;
+
+    const sn = Math.hypot(s1, s2, s3, s4) || 1;
+    s1 /= sn; s2 /= sn; s3 /= sn; s4 /= sn;
+
+    const qDot1 = 0.5 * (-q2 * gx - q3 * gy - q4 * gz) - this.beta * s1;
+    const qDot2 = 0.5 * (q1 * gx + q3 * gz - q4 * gy) - this.beta * s2;
+    const qDot3 = 0.5 * (q1 * gy - q2 * gz + q4 * gx) - this.beta * s3;
+    const qDot4 = 0.5 * (q1 * gz + q2 * gy - q3 * gx) - this.beta * s4;
+
+    q1 += qDot1 * dt;
+    q2 += qDot2 * dt;
+    q3 += qDot3 * dt;
+    q4 += qDot4 * dt;
+    this.q = quatNormalize({ w: q1, x: q2, y: q3, z: q4 });
+
+    // Gravity removal in world frame
+    const gBody = this._estimateGravity();
+    const lin = {
+      x: accel.x - gBody.x * norm,
+      y: accel.y - gBody.y * norm,
+      z: accel.z - gBody.z * norm,
+    };
+    this.linearAccel = lin;
+
+    // Drift-corrected integration
+    this._smoothVel.x += (lin.x - this._smoothVel.x) * this.smoothing;
+    this._smoothVel.y += (lin.y - this._smoothVel.y) * this.smoothing;
+    this._smoothVel.z += (lin.z - this._smoothVel.z) * this.smoothing;
+
+    this.velocity.x += this._smoothVel.x * dt;
+    this.velocity.y += this._smoothVel.y * dt;
+    this.velocity.z += this._smoothVel.z * dt;
+
+    // ZUPT-style drift correction when nearly stationary
+    const speed = Math.hypot(this.velocity.x, this.velocity.y, this.velocity.z);
+    if (speed < 0.05 && norm > 8) {
+      this.velocity.x *= 1 - this.driftCorrection;
+      this.velocity.y *= 1 - this.driftCorrection;
+      this.velocity.z *= 1 - this.driftCorrection;
+    }
+
+    this.position.x += this.velocity.x * dt;
+    this.position.y += this.velocity.y * dt;
+    this.position.z += this.velocity.z * dt;
+  }
+
+  /** @returns {import('../utils/math.js').Vec3} */
+  _estimateGravity() {
+    const q = this.q;
+    return {
+      x: 2 * (q.x * q.z - q.w * q.y),
+      y: 2 * (q.w * q.x + q.y * q.z),
+      z: q.w * q.w - q.x * q.x - q.y * q.y + q.z * q.z,
+    };
+  }
+
+  /** @returns {import('../utils/math.js').Quat} */
+  getQuaternion() {
+    return { ...this.q };
+  }
+}
+
+MadgwickFilter;
+
+
+/**
+ * Raw acceleration integration with realistic drift.
+ * @module motion/RawIntegrator
+ */
+
+/**
+ * Direct double-integration of accelerometer data.
+ */
+class RawIntegrator {
+  constructor() {
+    /** @type {import('../utils/math.js').Vec3} */
+    this.position = { x: 0, y: 0, z: 0 };
+    /** @type {import('../utils/math.js').Vec3} */
+    this.velocity = { x: 0, y: 0, z: 0 };
+    /** @type {import('../utils/math.js').Quat} */
+    this.q = { w: 1, x: 0, y: 0, z: 0 };
+  }
+
+  reset() {
+    this.position = { x: 0, y: 0, z: 0 };
+    this.velocity = { x: 0, y: 0, z: 0 };
+    this.q = { w: 1, x: 0, y: 0, z: 0 };
+  }
+
+  /**
+   * @param {{ x: number, y: number, z: number }} accel m/s²
+   * @param {{ x: number, y: number, z: number }} gyro rad/s
+   * @param {number} dt
+   * @param {import('../utils/math.js').Quat} [orientation]
+   */
+  update(accel, gyro, dt, orientation) {
+    if (orientation) {
+      this.q = { ...orientation };
+    } else {
+      // Simple gyro integration for orientation
+      const gx = gyro.x * dt * 0.5;
+      const gy = gyro.y * dt * 0.5;
+      const gz = gyro.z * dt * 0.5;
+      const q = this.q;
+      this.q = {
+        w: q.w - q.x * gx - q.y * gy - q.z * gz,
+        x: q.w * gx + q.x + q.y * gz - q.z * gy,
+        y: q.w * gy - q.x * gz + q.y + q.z * gx,
+        z: q.w * gz + q.x * gy - q.y * gx + q.z,
+      };
+      const len = Math.hypot(this.q.w, this.q.x, this.q.y, this.q.z) || 1;
+      this.q.w /= len; this.q.x /= len; this.q.y /= len; this.q.z /= len;
+    }
+
+    this.velocity.x += accel.x * dt;
+    this.velocity.y += accel.y * dt;
+    this.velocity.z += accel.z * dt;
+    this.position.x += this.velocity.x * dt;
+    this.position.y += this.velocity.y * dt;
+    this.position.z += this.velocity.z * dt;
+  }
+}
+
+RawIntegrator;
+
+
+
+/**
+ * Motion processing pipeline with swappable filters.
+ * @module motion/MotionProcessor
+ */
+
+
+/** @typedef {'raw'|'madgwick'|'kalman'|'complementary'|'mahony'} FilterType */
+
+/**
+ * Processes sensor samples into pose, velocity, and derived metrics.
+ */
+class MotionProcessor {
+  /**
+   * @param {import('../core/EventBus.js').EventBus} bus
+   */
+  constructor(bus) {
+    this.bus = bus;
+    this.filterType = 'madgwick';
+    this.madgwick = new MadgwickFilter(60, 0.1);
+    this.raw = new RawIntegrator();
+    /** @type {import('../utils/math.js').Vec3} */
+    this.lastAccel = { x: 0, y: 0, z: 0 };
+    /** @type {import('../utils/math.js').Vec3} */
+    this.lastGyro = { x: 0, y: 0, z: 0 };
+    this.totalDistance = 0;
+    /** @type {import('../utils/math.js').Vec3} */
+    this._lastPos = { x: 0, y: 0, z: 0 };
+  }
+
+  /**
+   * @param {FilterType} type
+   */
+  setFilter(type) {
+    if (!['raw', 'madgwick'].includes(type)) {
+      console.warn(`Filter ${type} not yet implemented, using madgwick`);
+      type = 'madgwick';
+    }
+    this.filterType = type;
+    this.reset();
+    this.bus.emit('filter:changed', type);
+  }
+
+  /**
+   * @param {number} rate
+   */
+  setSampleRate(rate) {
+    this.madgwick.setSampleRate(rate);
+  }
+
+  /**
+   * @param {number} smoothing
+   */
+  setSmoothing(smoothing) {
+    this.madgwick.smoothing = smoothing;
+  }
+
+  reset() {
+    this.madgwick.reset();
+    this.raw.reset();
+    this.totalDistance = 0;
+    this._lastPos = { x: 0, y: 0, z: 0 };
+  }
+
+  /**
+   * Process one sensor sample.
+   * @param {Object} sample
+   * @param {{ x: number, y: number, z: number }} sample.accel
+   * @param {{ x: number, y: number, z: number }} sample.gyro
+   * @param {number} sample.dt
+   * @param {import('../utils/math.js').Quat} [sample.orientation]
+   * @returns {ProcessedFrame}
+   */
+  process(sample) {
+    const { accel, gyro, dt, orientation } = sample;
+    this.lastAccel = { ...accel };
+    this.lastGyro = { ...gyro };
+
+    if (this.filterType === 'raw') {
+      this.raw.update(accel, gyro, dt, orientation);
+      const pos = this.raw.position;
+      const dist = Math.hypot(pos.x - this._lastPos.x, pos.y - this._lastPos.y, pos.z - this._lastPos.z);
+      this.totalDistance += dist;
+      this._lastPos = { ...pos };
+      return {
+        position: { ...pos },
+        velocity: { ...this.raw.velocity },
+        quaternion: { ...this.raw.q },
+        euler: quatToEuler(this.raw.q),
+        linearAccel: { ...accel },
+        rotationSpeed: Math.hypot(gyro.x, gyro.y, gyro.z),
+        gForce: Math.hypot(accel.x, accel.y, accel.z) / 9.80665,
+        distance: this.totalDistance,
+      };
+    }
+
+    this.madgwick.update(gyro, accel, dt);
+    const pos = this.madgwick.position;
+    const dist = Math.hypot(pos.x - this._lastPos.x, pos.y - this._lastPos.y, pos.z - this._lastPos.z);
+    this.totalDistance += dist;
+    this._lastPos = { ...pos };
+    const q = this.madgwick.getQuaternion();
+    const lin = this.madgwick.linearAccel ?? accel;
+
+    return {
+      position: { ...pos },
+      velocity: { ...this.madgwick.velocity },
+      quaternion: q,
+      euler: quatToEuler(q),
+      linearAccel: { ...lin },
+      rotationSpeed: Math.hypot(gyro.x, gyro.y, gyro.z),
+      gForce: Math.hypot(accel.x, accel.y, accel.z) / 9.80665,
+      distance: this.totalDistance,
+    };
+  }
+
+  /**
+   * Replay processed state from stored sample without re-integrating from zero.
+   * @param {Object} sample
+   * @param {ProcessedFrame} [cached]
+   * @returns {ProcessedFrame}
+   */
+  processPlaybackSample(sample, cached) {
+    if (cached) return cached;
+    return this.process(sample);
+  }
+}
+
+/**
+ * @typedef {Object} ProcessedFrame
+ * @property {import('../utils/math.js').Vec3} position
+ * @property {import('../utils/math.js').Vec3} velocity
+ * @property {import('../utils/math.js').Quat} quaternion
+ * @property {import('../utils/math.js').Vec3} euler
+ * @property {import('../utils/math.js').Vec3} linearAccel
+ * @property {number} rotationSpeed
+ * @property {number} gForce
+ * @property {number} distance
+ */
+
+MotionProcessor;
+
+
+/**
+ * Recording session data model and capture logic.
+ * @module recording/Recorder
+ */
+
+const FILE_VERSION = 1;
+
+/**
+ * @typedef {Object} MotionSample
+ * @property {number} timestamp
+ * @property {number} dt
+ * @property {{ x: number, y: number, z: number }} accel
+ * @property {{ x: number, y: number, z: number }} gyro
+ * @property {import('../utils/math.js').Quat|null} [orientation]
+ * @property {import('../motion/MotionProcessor.js').ProcessedFrame} [processed]
+ */
+
+/**
+ * @typedef {Object} RecordingMetadata
+ * @property {number} version
+ * @property {string} name
+ * @property {string} browser
+ * @property {string} platform
+ * @property {string} deviceModel
+ * @property {number} sampleRate
+ * @property {number} duration
+ * @property {Object} sensorAvailability
+ * @property {string} recordedAt
+ * @property {string} filterMode
+ */
+
+/**
+ * Captures and stores motion samples with metadata.
+ */
+class Recorder {
+  /**
+   * @param {import('../core/EventBus.js').EventBus} bus
+   */
+  constructor(bus) {
+    this.bus = bus;
+    /** @type {MotionSample[]} */
+    this.samples = [];
+    /** @type {RecordingMetadata} */
+    this.metadata = this._defaultMetadata();
+    this.recording = false;
+    this._startTime = 0;
+    this.unsaved = false;
+  }
+
+  _defaultMetadata() {
+    return {
+      version: FILE_VERSION,
+      name: 'Untitled Recording',
+      browser: navigator.userAgent,
+      platform: navigator.platform,
+      deviceModel: navigator.userAgentData?.model ?? 'Unknown',
+      sampleRate: 60,
+      duration: 0,
+      sensorAvailability: {},
+      recordedAt: new Date().toISOString(),
+      filterMode: 'madgwick',
+    };
+  }
+
+  /**
+   * @param {number} rate
+   * @param {Object} availability
+   * @param {string} filterMode
+   */
+  start(rate, availability, filterMode) {
+    this.samples = [];
+    this.metadata = {
+      ...this._defaultMetadata(),
+      sampleRate: rate,
+      sensorAvailability: availability,
+      filterMode,
+      recordedAt: new Date().toISOString(),
+    };
+    this.recording = true;
+    this._startTime = performance.now();
+    this.unsaved = true;
+    this.bus.emit('recording:started');
+  }
+
+  stop() {
+    if (!this.recording) return;
+    this.recording = false;
+    this.metadata.duration = this.samples.length
+      ? this.samples[this.samples.length - 1].timestamp - this.samples[0].timestamp
+      : 0;
+    this.bus.emit('recording:stopped', this.getRecording());
+  }
+
+  /**
+   * @param {MotionSample} sample
+   */
+  addSample(sample) {
+    if (!this.recording) return;
+    this.samples.push(sample);
+    this.metadata.duration = sample.timestamp - (this.samples[0]?.timestamp ?? sample.timestamp);
+    this.bus.emit('recording:sample', sample);
+  }
+
+  /**
+   * @returns {{ metadata: RecordingMetadata, samples: MotionSample[] }}
+   */
+  getRecording() {
+    return { metadata: { ...this.metadata }, samples: this.samples };
+  }
+
+  /**
+   * @param {{ metadata: RecordingMetadata, samples: MotionSample[] }} data
+   */
+  load(data) {
+    this.metadata = { ...data.metadata };
+    this.samples = data.samples;
+    this.recording = false;
+    this.unsaved = false;
+    this.bus.emit('recording:loaded', this.getRecording());
+  }
+
+  clear() {
+    this.samples = [];
+    this.metadata = this._defaultMetadata();
+    this.recording = false;
+    this.unsaved = false;
+    this.bus.emit('recording:cleared');
+  }
+
+  get duration() {
+    return this.metadata.duration;
+  }
+
+  get count() {
+    return this.samples.length;
+  }
+}
+
+Recorder;
+
+
+/**
+ * IndexedDB helpers for auto-save recovery of large recordings.
+ * @module utils/idb
+ */
+
+const DB_NAME = 'MotionCaptureStudio';
+const DB_VERSION = 1;
+const STORE = 'recordings';
+
+/**
+ * Open IndexedDB database.
+ * @returns {Promise<IDBDatabase>}
+ */
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(STORE)) {
+        db.createObjectStore(STORE, { keyPath: 'id' });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+/**
+ * @param {string} id
+ * @param {*} data
+ * @returns {Promise<void>}
+ */
+export async function idbPut(id, data) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).put({ id, data, updatedAt: Date.now() });
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+/**
+ * @param {string} id
+ * @returns {Promise<*|null>}
+ */
+export async function idbGet(id) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readonly');
+    const req = tx.objectStore(STORE).get(id);
+    req.onsuccess = () => resolve(req.result?.data ?? null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+/**
+ * @param {string} id
+ * @returns {Promise<void>}
+ */
+export async function idbDelete(id) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+
+/**
+ * Recording file management: save, recent files, auto-recovery.
+ * @module recording/RecordingManager
+ */
+
+
+const RECENT_KEY = 'mcs_recent_files';
+const AUTOSAVE_KEY = 'autosave';
+const MAX_RECENT = 12;
+
+/**
+ * Manages one active recording with persistence helpers.
+ */
+class RecordingManager {
+  /**
+   * @param {import('../core/EventBus.js').EventBus} bus
+   * @param {import('./Recorder.js').Recorder} recorder
+   */
+  constructor(bus, recorder) {
+    this.bus = bus;
+    this.recorder = recorder;
+    this.currentPath = null;
+    this._autosaveTimer = null;
+  }
+
+  /** @returns {string[]} */
+  getRecent() {
+    try {
+      return JSON.parse(localStorage.getItem(RECENT_KEY) || '[]');
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * @param {string} name
+   */
+  _addRecent(name) {
+    const list = this.getRecent().filter((n) => n !== name);
+    list.unshift(name);
+    localStorage.setItem(RECENT_KEY, JSON.stringify(list.slice(0, MAX_RECENT)));
+  }
+
+  /**
+   * @param {string} name
+   */
+  rename(name) {
+    this.recorder.metadata.name = name;
+    this.recorder.unsaved = true;
+    this.bus.emit('recording:renamed', name);
+  }
+
+  duplicate() {
+    const copy = structuredClone(this.recorder.getRecording());
+    copy.metadata.name += ' (Copy)';
+    this.recorder.load(copy);
+    this.currentPath = null;
+    this.recorder.unsaved = true;
+    this.bus.emit('recording:duplicated');
+  }
+
+  newRecording() {
+    if (this.recorder.unsaved && !confirm('Discard unsaved changes?')) return false;
+    this.recorder.clear();
+    this.currentPath = null;
+    return true;
+  }
+
+  deleteRecording() {
+    if (!confirm('Delete current recording?')) return;
+    this.recorder.clear();
+    this.currentPath = null;
+    idbDelete(AUTOSAVE_KEY);
+    this.bus.emit('recording:deleted');
+  }
+
+  /**
+   * @param {Blob} blob
+   * @param {string} filename
+   */
+  async saveAs(blob, filename) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    this.currentPath = filename;
+    this.recorder.unsaved = false;
+    this._addRecent(filename);
+    this.bus.emit('recording:saved', filename);
+  }
+
+  startAutosave(intervalMs = 15000) {
+    this.stopAutosave();
+    this._autosaveTimer = setInterval(() => this._autosave(), intervalMs);
+  }
+
+  stopAutosave() {
+    if (this._autosaveTimer) clearInterval(this._autosaveTimer);
+  }
+
+  async _autosave() {
+    if (!this.recorder.samples.length) return;
+    try {
+      await idbPut(AUTOSAVE_KEY, this.recorder.getRecording());
+      this.bus.emit('recording:autosaved');
+    } catch (err) {
+      console.warn('Autosave failed', err);
+    }
+  }
+
+  /** @returns {Promise<Object|null>} */
+  async recoverAutosave() {
+    return idbGet(AUTOSAVE_KEY);
+  }
+
+  async clearAutosave() {
+    await idbDelete(AUTOSAVE_KEY);
+  }
+}
+
+RecordingManager;
+
+
+
+/**
+ * Sample interpolation utilities for playback.
+ * @module playback/Interpolation
+ */
+
+
+/**
+ * Find bracketing indices for timestamp.
+ * @param {Array<{ timestamp: number }>} samples
+ * @param {number} t
+ * @returns {{ i0: number, i1: number, alpha: number }}
+ */
+function findBracket(samples, t) {
+  if (!samples.length) return { i0: 0, i1: 0, alpha: 0 };
+  if (t <= samples[0].timestamp) return { i0: 0, i1: 0, alpha: 0 };
+  const last = samples.length - 1;
+  if (t >= samples[last].timestamp) return { i0: last, i1: last, alpha: 0 };
+
+  let lo = 0, hi = last;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (samples[mid].timestamp <= t) lo = mid;
+    else hi = mid;
+  }
+  const s0 = samples[lo], s1 = samples[hi];
+  const span = s1.timestamp - s0.timestamp || 1;
+  const alpha = (t - s0.timestamp) / span;
+  return { i0: lo, i1: hi, alpha };
+}
+
+/**
+ * Interpolate between two motion samples.
+ * @param {Object} a
+ * @param {Object} b
+ * @param {number} t
+ * @returns {Object}
+ */
+function interpolateSamples(a, b, t) {
+  const l = (ka, kb) => lerp(a[ka], b[kb], t);
+  const lv = (v) => ({
+    x: lerp(a[v].x, b[v].x, t),
+    y: lerp(a[v].y, b[v].y, t),
+    z: lerp(a[v].z, b[v].z, t),
+  });
+
+  let orientation = null;
+  if (a.orientation && b.orientation) {
+    orientation = quatSlerp(a.orientation, b.orientation, t);
+  } else if (a.processed?.quaternion && b.processed?.quaternion) {
+    orientation = quatSlerp(a.processed.quaternion, b.processed.quaternion, t);
+  }
+
+  return {
+    timestamp: lerp(a.timestamp, b.timestamp, t),
+    dt: lerp(a.dt, b.dt, t),
+    accel: lv('accel'),
+    gyro: lv('gyro'),
+    orientation,
+    processed: a.processed && b.processed ? {
+      position: {
+        x: lerp(a.processed.position.x, b.processed.position.x, t),
+        y: lerp(a.processed.position.y, b.processed.position.y, t),
+        z: lerp(a.processed.position.z, b.processed.position.z, t),
+      },
+      velocity: {
+        x: lerp(a.processed.velocity.x, b.processed.velocity.x, t),
+        y: lerp(a.processed.velocity.y, b.processed.velocity.y, t),
+        z: lerp(a.processed.velocity.z, b.processed.velocity.z, t),
+      },
+      quaternion: orientation ?? quatSlerp(a.processed.quaternion, b.processed.quaternion, t),
+      euler: {
+        x: lerp(a.processed.euler.x, b.processed.euler.x, t),
+        y: lerp(a.processed.euler.y, b.processed.euler.y, t),
+        z: lerp(a.processed.euler.z, b.processed.euler.z, t),
+      },
+      linearAccel: {
+        x: lerp(a.processed.linearAccel.x, b.processed.linearAccel.x, t),
+        y: lerp(a.processed.linearAccel.y, b.processed.linearAccel.y, t),
+        z: lerp(a.processed.linearAccel.z, b.processed.linearAccel.z, t),
+      },
+      rotationSpeed: lerp(a.processed.rotationSpeed, b.processed.rotationSpeed, t),
+      gForce: lerp(a.processed.gForce, b.processed.gForce, t),
+      distance: lerp(a.processed.distance, b.processed.distance, t),
+    } : null,
+  };
+}
+
+/**
+ * Get interpolated sample at timestamp.
+ * @param {Array} samples
+ * @param {number} timestamp
+ * @returns {Object|null}
+ */
+function sampleAt(samples, timestamp) {
+  if (!samples.length) return null;
+  const { i0, i1, alpha } = findBracket(samples, timestamp);
+  if (i0 === i1) return samples[i0];
+  return interpolateSamples(samples[i0], samples[i1], alpha);
+}
+
+{ findBracket, interpolateSamples, sampleAt };
+
+
+
+/**
+ * Playback engine with timeline scrubbing and speed control.
+ * @module playback/PlaybackEngine
+ */
+
+
+/** @typedef {'stopped'|'playing'|'paused'} PlaybackState */
+
+/**
+ * Controls playback of recorded motion data.
+ */
+class PlaybackEngine {
+  /**
+   * @param {import('../core/EventBus.js').EventBus} bus
+   */
+  constructor(bus) {
+    this.bus = bus;
+    /** @type {PlaybackState} */
+    this.state = 'stopped';
+    this.speed = 1;
+    this.direction = 1;
+    /** @type {Array} */
+    this.samples = [];
+    this.currentTime = 0;
+    this._raf = null;
+    this._lastWall = 0;
+    this.inMarker = 0;
+    this.outMarker = Infinity;
+    this.fps = 0;
+    this._frameCount = 0;
+    this._fpsTimer = 0;
+  }
+
+  /**
+   * @param {Array} samples
+   */
+  setSamples(samples) {
+    this.samples = samples;
+    if (samples.length) {
+      this.outMarker = samples[samples.length - 1].timestamp - samples[0].timestamp;
+    }
+    this.currentTime = 0;
+    this.state = 'stopped';
+  }
+
+  /**
+   * @param {number} speed 0.05 - 4
+   */
+  setSpeed(speed) {
+    this.speed = clamp(speed, 0.05, 4);
+  }
+
+  play() {
+    if (!this.samples.length) return;
+    this.state = 'playing';
+    this.direction = 1;
+    this._lastWall = performance.now();
+    this._tick();
+    this.bus.emit('playback:play');
+  }
+
+  pause() {
+    this.state = 'paused';
+    if (this._raf) cancelAnimationFrame(this._raf);
+    this.bus.emit('playback:pause');
+  }
+
+  stop() {
+    this.state = 'stopped';
+    if (this._raf) cancelAnimationFrame(this._raf);
+    this.currentTime = this.inMarker;
+    this._emitFrame();
+    this.bus.emit('playback:stop');
+  }
+
+  reverse() {
+    if (this.state === 'playing') {
+      this.direction = -1;
+    } else {
+      this.state = 'playing';
+      this.direction = -1;
+      this._lastWall = performance.now();
+      this._tick();
+    }
+    this.bus.emit('playback:reverse');
+  }
+
+  nextFrame() {
+    if (!this.samples.length) return;
+    const base = this.samples[0].timestamp;
+    const avgDt = this._avgDt();
+    this.currentTime = clamp(this.currentTime + avgDt, this.inMarker, this.outMarker);
+    this._emitFrame();
+  }
+
+  prevFrame() {
+    if (!this.samples.length) return;
+    const avgDt = this._avgDt();
+    this.currentTime = clamp(this.currentTime - avgDt, this.inMarker, this.outMarker);
+    this._emitFrame();
+  }
+
+  _avgDt() {
+    if (this.samples.length < 2) return 1 / 60;
+    const span = this.samples[this.samples.length - 1].timestamp - this.samples[0].timestamp;
+    return span / (this.samples.length - 1);
+  }
+
+  /**
+   * @param {number} t Relative time ms from start
+   */
+  seek(t) {
+    this.currentTime = clamp(t, this.inMarker, this.outMarker);
+    this._emitFrame();
+  }
+
+  _tick = () => {
+    if (this.state !== 'playing') return;
+    const now = performance.now();
+    const wallDt = now - this._lastWall;
+    this._lastWall = now;
+    this.currentTime += wallDt * this.speed * this.direction;
+
+    if (this.currentTime >= this.outMarker) {
+      this.currentTime = this.outMarker;
+      this.pause();
+    } else if (this.currentTime <= this.inMarker) {
+      this.currentTime = this.inMarker;
+      if (this.direction < 0) this.pause();
+    }
+
+    this._emitFrame();
+    this._raf = requestAnimationFrame(this._tick);
+  };
+
+  _emitFrame() {
+    if (!this.samples.length) return;
+    const base = this.samples[0].timestamp;
+    const absTime = base + this.currentTime;
+    const frame = sampleAt(this.samples, absTime);
+    this._frameCount++;
+    const now = performance.now();
+    if (now - this._fpsTimer > 1000) {
+      this.fps = this._frameCount;
+      this._frameCount = 0;
+      this._fpsTimer = now;
+    }
+    this.bus.emit('playback:frame', {
+      time: this.currentTime,
+      absTime,
+      frame,
+      frameIndex: this._frameIndex(),
+      state: this.state,
+      fps: this.fps,
+    });
+  }
+
+  _frameIndex() {
+    if (!this.samples.length) return 0;
+    const base = this.samples[0].timestamp;
+    let best = 0, bestD = Infinity;
+    const target = base + this.currentTime;
+    for (let i = 0; i < this.samples.length; i++) {
+      const d = Math.abs(this.samples[i].timestamp - target);
+      if (d < bestD) { bestD = d; best = i; }
+    }
+    return best;
+  }
+
+  get duration() {
+    if (!this.samples.length) return 0;
+    return this.samples[this.samples.length - 1].timestamp - this.samples[0].timestamp;
+  }
+}
+
+PlaybackEngine;
+
+
+/**
+ * Procedural low-poly smartphone model.
+ * @module renderer/PhoneModel
+ */
+
+
+/**
+ * Builds a beveled smartphone mesh with screen, camera bump, and buttons.
+ */
+class PhoneModel {
+  /**
+   * @param {boolean} [wireframe=false]
+   */
+  constructor(wireframe = false) {
+    this.wireframe = wireframe;
+    this.group = new THREE.Group();
+    this._build();
+  }
+
+  _build() {
+    const bodyMat = new THREE.MeshStandardMaterial({
+      color: 0x1a2332,
+      metalness: 0.6,
+      roughness: 0.35,
+      wireframe: this.wireframe,
+    });
+    const screenMat = new THREE.MeshStandardMaterial({
+      color: 0x0a1628,
+      emissive: 0x003344,
+      emissiveIntensity: 0.4,
+      metalness: 0.1,
+      roughness: 0.2,
+      wireframe: this.wireframe,
+    });
+    const accentMat = new THREE.MeshStandardMaterial({
+      color: 0x00e5ff,
+      emissive: 0x00e5ff,
+      emissiveIntensity: 0.15,
+      metalness: 0.8,
+      roughness: 0.2,
+      wireframe: this.wireframe,
+    });
+
+    // Body — rounded box approximation with bevels via scaled box + chamfer feel
+    const w = 0.07, h = 0.14, d = 0.008;
+    const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d, 2, 4, 1), bodyMat);
+    body.castShadow = true;
+    body.receiveShadow = true;
+    this.group.add(body);
+
+    // Screen inset
+    const screen = new THREE.Mesh(new THREE.BoxGeometry(w * 0.88, h * 0.82, d * 0.3), screenMat);
+    screen.position.z = d * 0.45;
+    this.group.add(screen);
+
+    // Camera bump
+    const cam = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.003, 16), accentMat);
+    cam.rotation.x = Math.PI / 2;
+    cam.position.set(w * 0.25, h * 0.38, -d * 0.55);
+    this.group.add(cam);
+
+    // Side buttons
+    const btnGeo = new THREE.BoxGeometry(0.002, 0.02, 0.004);
+    const volUp = new THREE.Mesh(btnGeo, accentMat);
+    volUp.position.set(-w * 0.52, h * 0.15, 0);
+    const volDn = new THREE.Mesh(btnGeo, accentMat);
+    volDn.position.set(-w * 0.52, h * 0.05, 0);
+    const power = new THREE.Mesh(btnGeo, accentMat);
+    power.position.set(w * 0.52, h * 0.2, 0);
+    this.group.add(volUp, volDn, power);
+
+    // Front speaker / notch hint
+    const notch = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.004, 0.002), accentMat);
+    notch.position.set(0, h * 0.4, d * 0.4);
+    this.group.add(notch);
+
+    this.body = body;
+    this.materials = [bodyMat, screenMat, accentMat];
+  }
+
+  /**
+   * @param {import('../utils/math.js').Vec3} position
+   * @param {import('../utils/math.js').Quat} quaternion
+   */
+  setPose(position, quaternion) {
+    this.group.position.set(position.x, position.y, position.z);
+    this.group.quaternion.set(quaternion.x, quaternion.y, quaternion.z, quaternion.w);
+  }
+
+  /**
+   * @param {boolean} wf
+   */
+  setWireframe(wf) {
+    this.wireframe = wf;
+    for (const m of this.materials) m.wireframe = wf;
+  }
+
+  dispose() {
+    this.group.traverse((o) => {
+      if (o.geometry) o.geometry.dispose();
+    });
+    for (const m of this.materials) m.dispose();
+  }
+}
+
+PhoneModel;
+
+
+/**
+ * Motion trail rendering: line, ribbon, heatmap, ghost phones.
+ * @module renderer/TrailRenderer
+ */
+
+
+/** @typedef {'line'|'ribbon'|'heatmap'|'ghost'} TrailMode */
+
+/**
+ * GPU-efficient motion trail visualisation.
+ */
+class TrailRenderer {
+  constructor() {
+    this.mode = 'line';
+    this.group = new THREE.Group();
+    /** @type {THREE.Line|null} */
+    this.line = null;
+    /** @type {THREE.Mesh|null} */
+    this.ribbon = null;
+    /** @type {THREE.Points|null} */
+    this.heatmap = null;
+    /** @type {THREE.InstancedMesh|null} */
+    this.ghosts = null;
+    this._positions = [];
+    this._maxPoints = 50000;
+    this._ghostGeo = new THREE.BoxGeometry(0.07, 0.14, 0.008);
+    this._ghostMat = new THREE.MeshStandardMaterial({
+      color: 0x00e5ff,
+      transparent: true,
+      opacity: 0.25,
+      metalness: 0.5,
+      roughness: 0.4,
+    });
+  }
+
+  /**
+   * @param {TrailMode} mode
+   */
+  setMode(mode) {
+    this.mode = mode;
+    this._rebuild();
+  }
+
+  /**
+   * @param {Array<{ position: import('../utils/math.js').Vec3, quaternion?: import('../utils/math.js').Quat }>} points
+   * @param {number} [upToIndex]
+   */
+  update(points, upToIndex) {
+    const end = upToIndex !== undefined ? upToIndex + 1 : points.length;
+    this._positions = points.slice(0, end);
+    this._rebuild();
+  }
+
+  _clear() {
+    while (this.group.children.length) {
+      const c = this.group.children[0];
+      this.group.remove(c);
+      if (c.geometry) c.geometry.dispose();
+    }
+    this.line = null;
+    this.ribbon = null;
+    this.heatmap = null;
+    this.ghosts = null;
+  }
+
+  _rebuild() {
+    this._clear();
+    const pts = this._positions;
+    if (!pts.length) return;
+
+    if (this.mode === 'line') {
+      const verts = new Float32Array(pts.length * 3);
+      for (let i = 0; i < pts.length; i++) {
+        verts[i * 3] = pts[i].position.x;
+        verts[i * 3 + 1] = pts[i].position.y;
+        verts[i * 3 + 2] = pts[i].position.z;
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+      this.line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.85 }));
+      this.group.add(this.line);
+    } else if (this.mode === 'ribbon') {
+      const width = 0.02;
+      const positions = [];
+      const indices = [];
+      for (let i = 0; i < pts.length - 1; i++) {
+        const a = pts[i].position, b = pts[i + 1].position;
+        const dir = new THREE.Vector3(b.x - a.x, b.y - a.y, b.z - a.z).normalize();
+        const up = new THREE.Vector3(0, 1, 0);
+        const side = new THREE.Vector3().crossVectors(dir, up).normalize().multiplyScalar(width);
+        const base = positions.length / 3;
+        positions.push(a.x + side.x, a.y + side.y, a.z + side.z);
+        positions.push(a.x - side.x, a.y - side.y, a.z - side.z);
+        positions.push(b.x + side.x, b.y + side.y, b.z + side.z);
+        positions.push(b.x - side.x, b.y - side.y, b.z - side.z);
+        indices.push(base, base + 1, base + 2, base + 1, base + 3, base + 2);
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      geo.setIndex(indices);
+      geo.computeVertexNormals();
+      this.ribbon = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+        color: 0x00e5ff, transparent: true, opacity: 0.5, side: THREE.DoubleSide,
+      }));
+      this.group.add(this.ribbon);
+    } else if (this.mode === 'heatmap') {
+      const verts = new Float32Array(pts.length * 3);
+      const colors = new Float32Array(pts.length * 3);
+      let maxSpeed = 0;
+      const speeds = pts.map((p, i) => {
+        if (i === 0) return 0;
+        const a = pts[i - 1].position, b = p.position;
+        const s = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
+        maxSpeed = Math.max(maxSpeed, s);
+        return s;
+      });
+      for (let i = 0; i < pts.length; i++) {
+        verts[i * 3] = pts[i].position.x;
+        verts[i * 3 + 1] = pts[i].position.y;
+        verts[i * 3 + 2] = pts[i].position.z;
+        const t = maxSpeed > 0 ? speeds[i] / maxSpeed : 0;
+        colors[i * 3] = t;
+        colors[i * 3 + 1] = 1 - t * 0.5;
+        colors[i * 3 + 2] = 1 - t;
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+      geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      this.heatmap = new THREE.Points(geo, new THREE.PointsMaterial({
+        size: 0.015, vertexColors: true, transparent: true, opacity: 0.9,
+      }));
+      this.group.add(this.heatmap);
+    } else if (this.mode === 'ghost') {
+      const step = Math.max(1, Math.floor(pts.length / 40));
+      const count = Math.min(40, Math.ceil(pts.length / step));
+      this.ghosts = new THREE.InstancedMesh(this._ghostGeo, this._ghostMat, count);
+      const dummy = new THREE.Object3D();
+      let idx = 0;
+      for (let i = 0; i < pts.length && idx < count; i += step) {
+        const p = pts[i];
+        dummy.position.set(p.position.x, p.position.y, p.position.z);
+        if (p.quaternion) dummy.quaternion.set(p.quaternion.x, p.quaternion.y, p.quaternion.z, p.quaternion.w);
+        dummy.updateMatrix();
+        this.ghosts.setMatrixAt(idx++, dummy.matrix);
+      }
+      this.ghosts.instanceMatrix.needsUpdate = true;
+      this.group.add(this.ghosts);
+    }
+  }
+
+  dispose() {
+    this._clear();
+    this._ghostGeo.dispose();
+    this._ghostMat.dispose();
+  }
+}
+
+TrailRenderer;
+
+
+/**
+ * Camera modes: orbit, free, auto-follow.
+ * @module renderer/CameraController
+ */
+
+
+/** @typedef {'orbit'|'free'|'follow'} CameraMode */
+
+/**
+ * Manages viewport camera behaviour.
+ */
+class CameraController {
+  /**
+   * @param {THREE.PerspectiveCamera} camera
+   * @param {HTMLElement} domElement
+   */
+  constructor(camera, domElement) {
+    this.camera = camera;
+    this.mode = 'orbit';
+    this.controls = new OrbitControls(camera, domElement);
+    this.controls.enableDamping = true;
+    this.controls.dampingFactor = 0.08;
+    this.followSmoothing = 0.08;
+    /** @type {THREE.Vector3} */
+    this._target = new THREE.Vector3();
+    this._home = { position: new THREE.Vector3(0.4, 0.3, 0.5), target: new THREE.Vector3(0, 0.05, 0) };
+  }
+
+  /**
+   * @param {CameraMode} mode
+   */
+  setMode(mode) {
+    this.mode = mode;
+    this.controls.enabled = mode === 'orbit' || mode === 'free';
+  }
+
+  /**
+   * @param {import('../utils/math.js').Vec3} position
+   */
+  follow(position) {
+    if (this.mode !== 'follow') return;
+    const desired = new THREE.Vector3(
+      position.x + 0.25,
+      position.y + 0.2,
+      position.z + 0.35,
+    );
+    this.camera.position.lerp(desired, this.followSmoothing);
+    this._target.lerp(new THREE.Vector3(position.x, position.y, position.z), this.followSmoothing);
+    this.camera.lookAt(this._target);
+  }
+
+  reset() {
+    this.camera.position.copy(this._home.position);
+    this.controls.target.copy(this._home.target);
+    this.controls.update();
+  }
+
+  update() {
+    if (this.mode === 'orbit' || this.mode === 'free') {
+      this.controls.update();
+    }
+  }
+
+  dispose() {
+    this.controls.dispose();
+  }
+}
+
+CameraController;
+
+
+/**
+ * Three.js scene renderer with grid, lighting, and phone animation.
+ * @module renderer/SceneRenderer
+ */
+
+
+/**
+ * Main 3D workspace renderer.
+ */
+class SceneRenderer {
+  /**
+   * @param {HTMLElement} container
+   * @param {import('../core/EventBus.js').EventBus} bus
+   */
+  constructor(container, bus) {
+    this.bus = bus;
+    this.container = container;
+    this.renderTime = 0;
+    this.fps = 60;
+
+    const dpr = Math.min(window.devicePixelRatio, 2);
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+    this.renderer.setPixelRatio(dpr);
+    this.renderer.setSize(container.clientWidth, container.clientHeight);
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    container.appendChild(this.renderer.domElement);
+
+    this.scene = new THREE.Scene();
+    this.scene.background = new THREE.Color(0x0a0e14);
+    this.scene.fog = new THREE.FogExp2(0x0a0e14, 0.35);
+
+    this.camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.01, 100);
+    this.camera.position.set(0.4, 0.3, 0.5);
+
+    this.cameraCtrl = new CameraController(this.camera, this.renderer.domElement);
+    this.phone = new PhoneModel(false);
+    this.scene.add(this.phone.group);
+    this.trails = new TrailRenderer();
+    this.scene.add(this.trails.group);
+
+    this._buildEnvironment();
+    this._animate = this._animate.bind(this);
+    this._raf = requestAnimationFrame(this._animate);
+    this._frameCount = 0;
+    this._fpsTimer = performance.now();
+
+    window.addEventListener('resize', () => this._onResize());
+  }
+
+  _buildEnvironment() {
+    const grid = new THREE.GridHelper(2, 40, 0x00e5ff, 0x1a2a3a);
+    grid.material.opacity = 0.35;
+    grid.material.transparent = true;
+    grid.position.y = 0;
+    this.grid = grid;
+    this.scene.add(grid);
+
+    const axes = new THREE.AxesHelper(0.15);
+    axes.position.set(0, 0.001, 0);
+    this.axes = axes;
+    this.scene.add(axes);
+
+    const amb = new THREE.AmbientLight(0x404860, 0.6);
+    this.scene.add(amb);
+    const key = new THREE.DirectionalLight(0xffffff, 1.1);
+    key.position.set(2, 4, 3);
+    key.castShadow = true;
+    key.shadow.mapSize.set(1024, 1024);
+    this.keyLight = key;
+    this.scene.add(key);
+    const rim = new THREE.DirectionalLight(0x00e5ff, 0.35);
+    rim.position.set(-2, 1, -2);
+    this.scene.add(rim);
+
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(4, 4),
+      new THREE.MeshStandardMaterial({ color: 0x0d1219, roughness: 0.9, metalness: 0.1 }),
+    );
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    this.floor = floor;
+    this.scene.add(floor);
+  }
+
+  /**
+   * @param {Object} opts
+   */
+  applySettings(opts) {
+    if (opts.gridVisible !== undefined) this.grid.visible = opts.gridVisible;
+    if (opts.shadowsEnabled !== undefined) {
+      this.renderer.shadowMap.enabled = opts.shadowsEnabled;
+      this.keyLight.castShadow = opts.shadowsEnabled;
+    }
+    if (opts.trailMode) this.trails.setMode(opts.trailMode);
+    if (opts.phoneWireframe !== undefined) this.phone.setWireframe(opts.phoneWireframe);
+    if (opts.cameraMode) this.cameraCtrl.setMode(opts.cameraMode);
+    if (opts.autoFollowSmoothing !== undefined) this.cameraCtrl.followSmoothing = opts.autoFollowSmoothing;
+  }
+
+  /**
+   * @param {import('../utils/math.js').Vec3} position
+   * @param {import('../utils/math.js').Quat} quaternion
+   */
+  updatePhone(position, quaternion) {
+    this.phone.setPose(position, quaternion);
+    this.cameraCtrl.follow(position);
+  }
+
+  /**
+   * @param {Array} trailPoints
+   * @param {number} [index]
+   */
+  updateTrail(trailPoints, index) {
+    this.trails.update(trailPoints, index);
+  }
+
+  _onResize() {
+    const w = this.container.clientWidth;
+    const h = this.container.clientHeight;
+    this.camera.aspect = w / h;
+    this.camera.updateProjectionMatrix();
+    this.renderer.setSize(w, h);
+  }
+
+  _animate(now) {
+    const t0 = performance.now();
+    this.cameraCtrl.update();
+    this.renderer.render(this.scene, this.camera);
+    this.renderTime = performance.now() - t0;
+    this._frameCount++;
+    if (now - this._fpsTimer > 1000) {
+      this.fps = this._frameCount;
+      this._frameCount = 0;
+      this._fpsTimer = now;
+      this.bus.emit('renderer:stats', { fps: this.fps, renderTime: this.renderTime });
+    }
+    this._raf = requestAnimationFrame(this._animate);
+  }
+
+  /** Capture viewport screenshot. @returns {string} data URL */
+  screenshot() {
+    this.renderer.render(this.scene, this.camera);
+    return this.renderer.domElement.toDataURL('image/png');
+  }
+
+  dispose() {
+    cancelAnimationFrame(this._raf);
+    this.phone.dispose();
+    this.trails.dispose();
+    this.cameraCtrl.dispose();
+    this.renderer.dispose();
+  }
+}
+
+SceneRenderer;
+
+
+/**
+ * Toast notification system.
+ * @module ui/NotificationManager
+ */
+
+/**
+ * Displays transient toast messages.
+ */
+class NotificationManager {
+  /**
+   * @param {HTMLElement} container
+   */
+  constructor(container) {
+    this.container = container;
+  }
+
+  /**
+   * @param {string} message
+   * @param {'info'|'success'|'warning'|'error'} [type]
+   * @param {number} [duration=4000]
+   */
+  show(message, type = 'info', duration = 4000) {
+    const el = document.createElement('div');
+    el.className = `toast toast-${type}`;
+    el.textContent = message;
+    this.container.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('visible'));
+    setTimeout(() => {
+      el.classList.remove('visible');
+      setTimeout(() => el.remove(), 300);
+    }, duration);
+  }
+}
+
+NotificationManager;
+
+
+/**
+ * Command palette (Ctrl+Shift+P).
+ * @module ui/CommandPalette
+ */
+
+/**
+ * @typedef {Object} Command
+ * @property {string} id
+ * @property {string} label
+ * @property {string} [category]
+ * @property {() => void} action
+ * @property {string} [shortcut]
+ */
+
+/**
+ * Searchable command palette overlay.
+ */
+class CommandPalette {
+  /**
+   * @param {HTMLElement} overlay
+   * @param {import('../core/EventBus.js').EventBus} bus
+   */
+  constructor(overlay, bus) {
+    this.overlay = overlay;
+    this.bus = bus;
+    /** @type {Command[]} */
+    this.commands = [];
+    this.input = overlay.querySelector('.cmd-input');
+    this.list = overlay.querySelector('.cmd-list');
+    this.visible = false;
+
+    overlay.querySelector('.cmd-close')?.addEventListener('click', () => this.hide());
+    this.input?.addEventListener('input', () => this._filter());
+    this.input?.addEventListener('keydown', (e) => this._onKey(e));
+  }
+
+  /**
+   * @param {Command[]} commands
+   */
+  register(commands) {
+    this.commands = commands;
+  }
+
+  show() {
+    this.visible = true;
+    this.overlay.classList.add('visible');
+    this.input.value = '';
+    this._filter();
+    this.input.focus();
+  }
+
+  hide() {
+    this.visible = false;
+    this.overlay.classList.remove('visible');
+  }
+
+  toggle() {
+    if (this.visible) this.hide();
+    else this.show();
+  }
+
+  _filter() {
+    const q = this.input.value.toLowerCase();
+    const matches = this.commands.filter((c) =>
+      c.label.toLowerCase().includes(q) || c.category?.toLowerCase().includes(q),
+    );
+    this.list.innerHTML = matches.map((c, i) =>
+      `<button class="cmd-item" data-idx="${i}"><span class="cmd-label">${c.label}</span><span class="cmd-cat">${c.category ?? ''}</span><span class="cmd-key">${c.shortcut ?? ''}</span></button>`,
+    ).join('');
+    this._matches = matches;
+    this.list.querySelectorAll('.cmd-item').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const cmd = this._matches[Number(btn.dataset.idx)];
+        cmd?.action();
+        this.hide();
+      });
+    });
+  }
+
+  _onKey(e) {
+    if (e.key === 'Escape') this.hide();
+    if (e.key === 'Enter' && this._matches?.length) {
+      this._matches[0].action();
+      this.hide();
+    }
+  }
+}
+
+CommandPalette;
+
+
+/**
+ * Resizable dockable panel layout manager.
+ * @module ui/PanelManager
+ */
+
+/**
+ * Handles panel resize handles and collapse state.
+ */
+class PanelManager {
+  constructor() {
+    this._initResizers();
+  }
+
+  _initResizers() {
+    document.querySelectorAll('[data-resize]').forEach((handle) => {
+      const target = document.querySelector(handle.dataset.resize);
+      if (!target) return;
+      let startX = 0, startW = 0;
+      handle.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        startX = e.clientX;
+        startW = target.getBoundingClientRect().width;
+        const onMove = (ev) => {
+          const dx = ev.clientX - startX;
+          const side = handle.dataset.side === 'left' ? 1 : -1;
+          target.style.width = `${Math.max(180, startW + dx * side)}px`;
+        };
+        const onUp = () => {
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+      });
+    });
+  }
+}
+
+PanelManager;
+
+
+/**
+ * Global keyboard shortcuts.
+ * @module ui/KeyboardManager
+ */
+
+/**
+ * @typedef {Object} Shortcut
+ * @property {string} key
+ * @property {boolean} [ctrl]
+ * @property {boolean} [shift]
+ * @property {boolean} [alt]
+ * @property {() => void} action
+ * @property {string} label
+ */
+
+/**
+ * Registers and handles keyboard shortcuts.
+ */
+class KeyboardManager {
+  constructor() {
+    /** @type {Shortcut[]} */
+    this.shortcuts = [];
+    document.addEventListener('keydown', (e) => this._onKey(e));
+  }
+
+  /**
+   * @param {Shortcut[]} list
+   */
+  register(list) {
+    this.shortcuts.push(...list);
+  }
+
+  _onKey(e) {
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+      if (!(e.ctrlKey && e.shiftKey && e.key === 'P')) return;
+    }
+    for (const s of this.shortcuts) {
+      const ctrl = s.ctrl ? e.ctrlKey || e.metaKey : !(e.ctrlKey || e.metaKey);
+      const shift = s.shift ? e.shiftKey : !e.shiftKey;
+      const alt = s.alt ? e.altKey : !e.altKey;
+      if (ctrl && shift && alt && e.key.toLowerCase() === s.key.toLowerCase()) {
+        e.preventDefault();
+        s.action();
+        return;
+      }
+    }
+  }
+
+  /** @returns {Array<{ label: string, key: string }>} */
+  listForEditor() {
+    return this.shortcuts.map((s) => ({
+      label: s.label,
+      key: `${s.ctrl ? 'Ctrl+' : ''}${s.shift ? 'Shift+' : ''}${s.alt ? 'Alt+' : ''}${s.key.toUpperCase()}`,
+    }));
+  }
+}
+
+KeyboardManager;
+
+
+/**
+ * Right-click context menus.
+ * @module ui/ContextMenu
+ */
+
+/**
+ * Simple context menu helper.
+ */
+class ContextMenu {
+  /**
+   * @param {HTMLElement} root
+   */
+  constructor(root) {
+    this.root = root;
+    this.menu = document.createElement('div');
+    this.menu.className = 'context-menu hidden';
+    root.appendChild(this.menu);
+    document.addEventListener('click', () => this.hide());
+  }
+
+  /**
+   * @param {number} x
+   * @param {number} y
+   * @param {Array<{ label: string, action: () => void, disabled?: boolean }>} items
+   */
+  show(x, y, items) {
+    this.menu.innerHTML = items.map((it, i) =>
+      `<button class="ctx-item" data-i="${i}" ${it.disabled ? 'disabled' : ''}>${it.label}</button>`,
+    ).join('');
+    this.menu.style.left = `${x}px`;
+    this.menu.style.top = `${y}px`;
+    this.menu.classList.remove('hidden');
+    this.menu.querySelectorAll('.ctx-item').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const item = items[Number(btn.dataset.i)];
+        if (!item.disabled) item.action();
+        this.hide();
+      });
+    });
+  }
+
+  hide() {
+    this.menu.classList.add('hidden');
+  }
+}
+
+ContextMenu;
+
+
+/**
+ * Canvas graph renderer for sensor and derived signals.
+ * @module graphs/GraphCanvas
+ */
+
+/**
+ * Single time-series graph with tooltip description.
+ */
+class GraphCanvas {
+  /**
+   * @param {HTMLCanvasElement} canvas
+   * @param {string} title
+   * @param {string} tooltip
+   * @param {string} [color='#00e5ff']
+   */
+  constructor(canvas, title, tooltip, color = '#00e5ff') {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.title = title;
+    this.tooltip = tooltip;
+    this.color = color;
+    /** @type {Float32Array} */
+    this.data = new Float32Array(0);
+    this.maxPoints = 512;
+    canvas.title = tooltip;
+  }
+
+  /**
+   * @param {number[]} values
+   */
+  push(values) {
+    const merged = new Float32Array(Math.min(this.maxPoints, this.data.length + values.length));
+    const start = Math.max(0, this.data.length + values.length - this.maxPoints);
+    const oldStart = Math.max(0, this.data.length - (this.maxPoints - values.length));
+    let o = 0;
+    for (let i = oldStart; i < this.data.length; i++) merged[o++] = this.data[i];
+    for (let i = 0; i < values.length && o < this.maxPoints; i++) merged[o++] = values[i];
+    this.data = merged.subarray(0, o);
+    this.draw();
+  }
+
+  setData(arr) {
+    this.data = arr instanceof Float32Array ? arr : Float32Array.from(arr.slice(-this.maxPoints));
+    this.draw();
+  }
+
+  resize() {
+    const rect = this.canvas.parentElement.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    this.canvas.width = rect.width * dpr;
+    this.canvas.height = rect.height * dpr;
+    this.canvas.style.width = `${rect.width}px`;
+    this.canvas.style.height = `${rect.height}px`;
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.draw();
+  }
+
+  draw() {
+    const ctx = this.ctx;
+    const w = this.canvas.width / (window.devicePixelRatio || 1);
+    const h = this.canvas.height / (window.devicePixelRatio || 1);
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = 'rgba(16, 22, 32, 0.6)';
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#8b9cb3';
+    ctx.font = '11px system-ui';
+    ctx.fillText(this.title, 6, 14);
+
+    if (!this.data.length) return;
+    let min = Infinity, max = -Infinity;
+    for (let i = 0; i < this.data.length; i++) {
+      min = Math.min(min, this.data[i]);
+      max = Math.max(max, this.data[i]);
+    }
+    const range = max - min || 1;
+    const pad = 20;
+    ctx.strokeStyle = this.color;
+    ctx.lineWidth = 1.5;
+    ctx.shadowColor = this.color;
+    ctx.shadowBlur = 4;
+    ctx.beginPath();
+    for (let i = 0; i < this.data.length; i++) {
+      const x = pad + (i / (this.data.length - 1 || 1)) * (w - pad * 2);
+      const y = h - pad - ((this.data[i] - min) / range) * (h - pad * 2);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#8b9cb3';
+    ctx.fillText(`${max.toFixed(2)}`, w - 48, 14);
+    ctx.fillText(`${min.toFixed(2)}`, w - 48, h - 6);
+  }
+}
+
+GraphCanvas;
+
+
+
+/**
+ * Manages all live data visualisation graphs.
+ * @module graphs/GraphManager
+ */
+
+
+/** @type {Record<string, { title: string, tip: string, color: string }>} */
+const GRAPH_DEFS = {
+  accelX: { title: 'Accel X', tip: 'Linear acceleration along the device X axis (m/s²), including gravity unless filtered.', color: '#00e5ff' },
+  accelY: { title: 'Accel Y', tip: 'Linear acceleration along the device Y axis (m/s²).', color: '#00ffc8' },
+  accelZ: { title: 'Accel Z', tip: 'Linear acceleration along the device Z axis (m/s²).', color: '#4d9fff' },
+  gyroX: { title: 'Gyro X', tip: 'Angular velocity around X (rad/s).', color: '#ff6b9d' },
+  gyroY: { title: 'Gyro Y', tip: 'Angular velocity around Y (rad/s).', color: '#ffb347' },
+  gyroZ: { title: 'Gyro Z', tip: 'Angular velocity around Z (rad/s).', color: '#c77dff' },
+  velocity: { title: 'Velocity', tip: 'Estimated speed magnitude from integrated acceleration (m/s).', color: '#00e5ff' },
+  position: { title: 'Position', tip: 'Estimated displacement magnitude from origin (m). Subject to drift.', color: '#7fff7f' },
+  distance: { title: 'Distance', tip: 'Cumulative path length travelled (m).', color: '#ffd700' },
+  rotationSpeed: { title: 'Rotation Speed', tip: 'Combined angular velocity magnitude (rad/s).', color: '#ff8c69' },
+  gForce: { title: 'G-Force', tip: 'Total acceleration magnitude in g units (1 g ≈ 9.81 m/s²).', color: '#ff4444' },
+  fft: { title: 'FFT Spectrum', tip: 'Frequency spectrum of acceleration magnitude — useful for vibration analysis.', color: '#9b59b6' },
+};
+
+/**
+ * Graph panel coordinator.
+ */
+class GraphManager {
+  /**
+   * @param {HTMLElement} container
+   * @param {import('../core/EventBus.js').EventBus} bus
+   */
+  constructor(container, bus) {
+    this.bus = bus;
+    this.container = container;
+    /** @type {Map<string, GraphCanvas>} */
+    this.graphs = new Map();
+    this._fftBuffer = new Float32Array(256);
+    this._build();
+  }
+
+  _build() {
+    this.container.innerHTML = '';
+    for (const [id, def] of Object.entries(GRAPH_DEFS)) {
+      const wrap = document.createElement('div');
+      wrap.className = 'graph-cell';
+      wrap.dataset.graph = id;
+      const canvas = document.createElement('canvas');
+      wrap.appendChild(canvas);
+      this.container.appendChild(wrap);
+      this.graphs.set(id, new GraphCanvas(canvas, def.title, def.tip, def.color));
+    }
+  }
+
+  /**
+   * @param {Object} frame Processed frame or sample
+   */
+  updateLive(frame) {
+    const a = frame.accel ?? frame.linearAccel;
+    const g = frame.gyro ?? { x: 0, y: 0, z: 0 };
+    const p = frame.processed ?? frame;
+    this.graphs.get('accelX')?.push([a.x]);
+    this.graphs.get('accelY')?.push([a.y]);
+    this.graphs.get('accelZ')?.push([a.z]);
+    this.graphs.get('gyroX')?.push([g.x]);
+    this.graphs.get('gyroY')?.push([g.y]);
+    this.graphs.get('gyroZ')?.push([g.z]);
+    const vel = p.velocity ? Math.hypot(p.velocity.x, p.velocity.y, p.velocity.z) : 0;
+    const pos = p.position ? Math.hypot(p.position.x, p.position.y, p.position.z) : 0;
+    this.graphs.get('velocity')?.push([vel]);
+    this.graphs.get('position')?.push([pos]);
+    this.graphs.get('distance')?.push([p.distance ?? 0]);
+    this.graphs.get('rotationSpeed')?.push([p.rotationSpeed ?? 0]);
+    this.graphs.get('gForce')?.push([p.gForce ?? 0]);
+
+    const mag = Math.hypot(a.x, a.y, a.z);
+    this._fftBuffer.copyWithin(0, 1);
+    this._fftBuffer[this._fftBuffer.length - 1] = mag;
+    this._updateFft();
+  }
+
+  _updateFft() {
+    const n = nextPow2(this._fftBuffer.length);
+    const re = new Float32Array(n);
+    const im = new Float32Array(n);
+    for (let i = 0; i < this._fftBuffer.length; i++) re[i] = this._fftBuffer[i];
+    fft(re, im);
+    const half = n >> 1;
+    const mags = new Float32Array(half);
+    for (let i = 0; i < half; i++) mags[i] = Math.hypot(re[i], im[i]);
+    this.graphs.get('fft')?.setData(mags);
+  }
+
+  /**
+   * @param {Record<string, boolean>} visibility
+   */
+  setVisibility(visibility) {
+    for (const [id, visible] of Object.entries(visibility)) {
+      const cell = this.container.querySelector(`[data-graph="${id}"]`);
+      if (cell) cell.style.display = visible ? '' : 'none';
+    }
+  }
+
+  resizeAll() {
+    for (const g of this.graphs.values()) g.resize();
+  }
+
+  clear() {
+    for (const g of this.graphs.values()) g.setData(new Float32Array(0));
+  }
+}
+
+GraphManager;
+
+
+
+/**
+ * Virtualized timeline inspired by professional DAW/NLE tools.
+ * @module timeline/Timeline
+ */
+
+
+/**
+ * Canvas-based timeline with zoom, pan, playhead, in/out markers.
+ */
+class Timeline {
+  /**
+   * @param {HTMLCanvasElement} canvas
+   * @param {import('../core/EventBus.js').EventBus} bus
+   */
+  constructor(canvas, bus) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.bus = bus;
+    this.duration = 0;
+    this.currentTime = 0;
+    this.zoom = 1;
+    this.pan = 0;
+    this.inMarker = 0;
+    this.outMarker = 0;
+    this.sampleCount = 0;
+    this._dragging = false;
+    this._panning = false;
+    this._lastX = 0;
+
+    canvas.addEventListener('mousedown', (e) => this._onDown(e));
+    canvas.addEventListener('mousemove', (e) => this._onMove(e));
+    canvas.addEventListener('mouseup', () => { this._dragging = false; this._panning = false; });
+    canvas.addEventListener('wheel', (e) => this._onWheel(e), { passive: false });
+    canvas.addEventListener('dblclick', (e) => this._onDblClick(e));
+  }
+
+  /**
+   * @param {number} duration ms
+   * @param {number} samples
+   */
+  setData(duration, samples) {
+    this.duration = duration;
+    this.sampleCount = samples;
+    this.outMarker = duration;
+    this.draw();
+  }
+
+  /**
+   * @param {number} t
+   */
+  setPlayhead(t) {
+    this.currentTime = t;
+    this.draw();
+  }
+
+  _timeToX(t) {
+    const w = this.canvas.width;
+    const visible = this.duration / this.zoom;
+    const start = this.pan;
+    return ((t - start) / visible) * w;
+  }
+
+  _xToTime(x) {
+    const w = this.canvas.width;
+    const visible = this.duration / this.zoom;
+    const start = this.pan;
+    return start + (x / w) * visible;
+  }
+
+  _onDown(e) {
+    const rect = this.canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) * (this.canvas.width / rect.width);
+    if (e.button === 1 || e.shiftKey) {
+      this._panning = true;
+      this._lastX = x;
+    } else {
+      this._dragging = true;
+      const t = clamp(this._xToTime(x), 0, this.duration);
+      this.bus.emit('timeline:seek', t);
+    }
+  }
+
+  _onMove(e) {
+    const rect = this.canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) * (this.canvas.width / rect.width);
+    if (this._panning) {
+      const dx = x - this._lastX;
+      const visible = this.duration / this.zoom;
+      this.pan -= (dx / this.canvas.width) * visible;
+      this.pan = clamp(this.pan, 0, Math.max(0, this.duration - visible));
+      this._lastX = x;
+      this.draw();
+    } else if (this._dragging) {
+      const t = clamp(this._xToTime(x), 0, this.duration);
+      this.bus.emit('timeline:seek', t);
+    }
+  }
+
+  _onWheel(e) {
+    e.preventDefault();
+    const factor = e.deltaY > 0 ? 0.9 : 1.1;
+    this.zoom = clamp(this.zoom * factor, 1, 500);
+    this.draw();
+  }
+
+  _onDblClick(e) {
+    const rect = this.canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) * (this.canvas.width / rect.width);
+    const t = clamp(this._xToTime(x), 0, this.duration);
+    if (e.altKey) this.inMarker = t;
+    else if (e.ctrlKey) this.outMarker = t;
+    else this.bus.emit('timeline:seek', t);
+    this.draw();
+  }
+
+  resize() {
+    const rect = this.canvas.parentElement.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    this.canvas.width = rect.width * dpr;
+    this.canvas.height = rect.height * dpr;
+    this.canvas.style.width = `${rect.width}px`;
+    this.canvas.style.height = `${rect.height}px`;
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.draw();
+  }
+
+  draw() {
+    const ctx = this.ctx;
+    const w = this.canvas.width / (window.devicePixelRatio || 1);
+    const h = this.canvas.height / (window.devicePixelRatio || 1);
+    ctx.clearRect(0, 0, w, h);
+
+    // Background
+    ctx.fillStyle = 'rgba(10, 14, 20, 0.95)';
+    ctx.fillRect(0, 0, w, h);
+
+    const visible = this.duration / this.zoom || 1;
+    const tickStep = this._niceStep(visible / 10);
+
+    // Ticks
+    ctx.strokeStyle = 'rgba(0, 229, 255, 0.2)';
+    ctx.fillStyle = '#8b9cb3';
+    ctx.font = '10px system-ui';
+    const startTick = Math.floor(this.pan / tickStep) * tickStep;
+    for (let t = startTick; t < this.pan + visible; t += tickStep) {
+      const x = this._timeToX(t);
+      if (x < 0 || x > w) continue;
+      ctx.beginPath();
+      ctx.moveTo(x, h - 18);
+      ctx.lineTo(x, h);
+      ctx.stroke();
+      ctx.fillText(`${(t / 1000).toFixed(2)}s`, x + 2, h - 4);
+    }
+
+    // Waveform proxy — decimated amplitude bars
+    if (this.sampleCount > 0) {
+      const bars = Math.min(800, Math.floor(w));
+      const barW = w / bars;
+      ctx.fillStyle = 'rgba(0, 229, 255, 0.25)';
+      for (let i = 0; i < bars; i++) {
+        const t0 = this.pan + (i / bars) * visible;
+        const amp = 0.3 + 0.7 * Math.abs(Math.sin(t0 * 0.003 + i * 0.1));
+        const bh = amp * (h - 24) * 0.5;
+        ctx.fillRect(i * barW, h - 20 - bh, barW - 0.5, bh);
+      }
+    }
+
+    // In/out markers
+    ctx.fillStyle = 'rgba(0, 200, 120, 0.35)';
+    ctx.fillRect(this._timeToX(this.inMarker), 0, this._timeToX(this.outMarker) - this._timeToX(this.inMarker), h);
+    ctx.strokeStyle = '#00c878';
+    ctx.strokeRect(this._timeToX(this.inMarker), 0, this._timeToX(this.outMarker) - this._timeToX(this.inMarker), h);
+
+    // Playhead
+    const px = this._timeToX(this.currentTime);
+    ctx.strokeStyle = '#00e5ff';
+    ctx.lineWidth = 2;
+    ctx.shadowColor = '#00e5ff';
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.moveTo(px, 0);
+    ctx.lineTo(px, h);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.lineWidth = 1;
+
+    // Frame label
+    const frame = Math.round((this.currentTime / (this.duration || 1)) * this.sampleCount);
+    ctx.fillStyle = '#e6edf5';
+    ctx.fillText(`Frame ${frame} / ${this.sampleCount}`, 8, 14);
+    ctx.fillText(`${(this.currentTime / 1000).toFixed(3)}s`, 8, 28);
+  }
+
+  _niceStep(rough) {
+    const pow = Math.pow(10, Math.floor(Math.log10(rough)));
+    const norm = rough / pow;
+    const nice = norm < 1.5 ? 1 : norm < 3 ? 2 : norm < 7 ? 5 : 10;
+    return nice * pow;
+  }
+}
+
+Timeline;
+
+
+
+/**
+ * Motion statistics and quality scoring engine.
+ * @module statistics/StatisticsEngine
+ */
+
+
+/**
+ * Computes recording and playback statistics.
+ */
+class StatisticsEngine {
+  constructor() {
+    this.stats = this._empty();
+  }
+
+  _empty() {
+    return {
+      duration: 0,
+      sampleCount: 0,
+      actualSampleRate: 0,
+      peakAcceleration: 0,
+      peakRotationSpeed: 0,
+      peakGForce: 0,
+      averageGForce: 0,
+      distanceTravelled: 0,
+      maxVelocity: 0,
+      averageVelocity: 0,
+      driftEstimate: 0,
+      sensorQualityScore: 0,
+      playbackFps: 0,
+      memoryUsageEstimate: 0,
+      motionQualityScore: 0,
+      peakImpacts: 0,
+    };
+  }
+
+  /**
+   * @param {Array} samples
+   * @param {number} [playbackFps]
+   */
+  compute(samples, playbackFps = 0) {
+    if (!samples.length) {
+      this.stats = this._empty();
+      return this.stats;
+    }
+
+    let peakAcc = 0, peakRot = 0, peakG = 0, sumG = 0;
+    let maxVel = 0, sumVel = 0, velCount = 0;
+    let dist = 0;
+    let gaps = 0;
+    let impacts = 0;
+    const duration = samples[samples.length - 1].timestamp - samples[0].timestamp;
+
+    for (let i = 0; i < samples.length; i++) {
+      const s = samples[i];
+      const acc = Math.hypot(s.accel.x, s.accel.y, s.accel.z);
+      peakAcc = Math.max(peakAcc, acc);
+      const rot = Math.hypot(s.gyro.x, s.gyro.y, s.gyro.z);
+      peakRot = Math.max(peakRot, rot);
+      const g = acc / 9.80665;
+      peakG = Math.max(peakG, g);
+      sumG += g;
+      if (g > 3) impacts++;
+
+      const p = s.processed;
+      if (p) {
+        const v = Math.hypot(p.velocity.x, p.velocity.y, p.velocity.z);
+        maxVel = Math.max(maxVel, v);
+        sumVel += v;
+        velCount++;
+        dist = Math.max(dist, p.distance ?? 0);
+      }
+      if (i > 0) {
+        const expected = 1000 / (samples[0].dt ? 1 / samples[0].dt : 60);
+        const actual = samples[i].timestamp - samples[i - 1].timestamp;
+        if (actual > expected * 2) gaps++;
+      }
+    }
+
+    const actualRate = duration > 0 ? (samples.length / duration) * 1000 : 0;
+    const mem = samples.length * 200; // rough bytes per sample estimate
+
+    // Drift: distance when device likely stationary at end
+    const tail = samples.slice(-Math.min(30, samples.length));
+    let drift = 0;
+    if (tail.length > 1) {
+      const p0 = tail[0].processed?.position, p1 = tail[tail.length - 1].processed?.position;
+      if (p0 && p1) drift = Math.hypot(p1.x - p0.x, p1.y - p0.y, p1.z - p0.z);
+    }
+
+    const gapPenalty = gaps / samples.length;
+    const sensorQuality = Math.max(0, Math.min(100, 100 - gapPenalty * 500 - drift * 10));
+    const motionQuality = Math.max(0, Math.min(100, sensorQuality * 0.6 + (peakG < 10 ? 20 : 0) + (actualRate > 25 ? 20 : 0)));
+
+    this.stats = {
+      duration,
+      sampleCount: samples.length,
+      actualSampleRate: actualRate,
+      peakAcceleration: peakAcc,
+      peakRotationSpeed: peakRot,
+      peakGForce: peakG,
+      averageGForce: sumG / samples.length,
+      distanceTravelled: dist,
+      maxVelocity: maxVel,
+      averageVelocity: velCount ? sumVel / velCount : 0,
+      driftEstimate: drift,
+      sensorQualityScore: sensorQuality,
+      playbackFps,
+      memoryUsageEstimate: mem,
+      motionQualityScore: motionQuality,
+      peakImpacts: impacts,
+    };
+    return this.stats;
+  }
+
+  /**
+   * @returns {Array<{ label: string, value: string }>}
+   */
+  toDisplayRows() {
+    const s = this.stats;
+    return [
+      { label: 'Duration', value: `${(s.duration / 1000).toFixed(2)} s` },
+      { label: 'Samples', value: String(s.sampleCount) },
+      { label: 'Sample Rate', value: `${s.actualSampleRate.toFixed(1)} Hz` },
+      { label: 'Peak Acceleration', value: `${s.peakAcceleration.toFixed(2)} m/s²` },
+      { label: 'Peak Rotation', value: `${s.peakRotationSpeed.toFixed(2)} rad/s` },
+      { label: 'Peak G-Force', value: `${s.peakGForce.toFixed(2)} g` },
+      { label: 'Average G-Force', value: `${s.averageGForce.toFixed(2)} g` },
+      { label: 'Distance', value: `${s.distanceTravelled.toFixed(3)} m` },
+      { label: 'Max Velocity', value: `${s.maxVelocity.toFixed(3)} m/s` },
+      { label: 'Avg Velocity', value: `${s.averageVelocity.toFixed(3)} m/s` },
+      { label: 'Drift Estimate', value: `${s.driftEstimate.toFixed(3)} m` },
+      { label: 'Sensor Quality', value: `${s.sensorQualityScore.toFixed(0)} / 100` },
+      { label: 'Motion Quality', value: `${s.motionQualityScore.toFixed(0)} / 100` },
+      { label: 'Playback FPS', value: String(s.playbackFps) },
+      { label: 'Memory Est.', value: formatBytes(s.memoryUsageEstimate) },
+      { label: 'Impact Events', value: String(s.peakImpacts) },
+    ];
+  }
+}
+
+StatisticsEngine;
+
+
+/**
+ * Multi-step sensor calibration wizard.
+ * @module calibration/CalibrationWizard
+ */
+
+/**
+ * Guides users through gravity, drift, and sensor calibration.
+ */
+class CalibrationWizard {
+  /**
+   * @param {import('../core/EventBus.js').EventBus} bus
+   */
+  constructor(bus) {
+    this.bus = bus;
+    this.step = 0;
+    this.steps = [
+      {
+        id: 'gravity',
+        title: 'Gravity Calibration',
+        description: 'Place your device flat on a level surface, screen facing up. This establishes the gravity vector for orientation fusion.',
+        when: 'Use before every session or when switching filter modes.',
+        improvement: 'Improves tilt accuracy and gravity removal in filtered mode.',
+      },
+      {
+        id: 'drift',
+        title: 'Drift Calibration',
+        description: 'Keep the device completely still for 5 seconds. The filter learns stationary bias to reduce position drift.',
+        when: 'Use after gravity calibration and before recording motion.',
+        improvement: 'Reduces velocity drift during slow movements.',
+      },
+      {
+        id: 'sensor',
+        title: 'Sensor Calibration',
+        description: 'Rotate the device slowly through all axes for 10 seconds. Gyroscope bias is estimated.',
+        when: 'Use when you notice rotation drift or after device temperature changes.',
+        improvement: 'Improves quaternion stability and rotation tracking.',
+      },
+    ];
+    this._samples = [];
+    this._active = false;
+    this._timer = null;
+    this.results = { gravity: null, drift: null, gyroBias: null };
+  }
+
+  get currentStep() {
+    return this.steps[this.step];
+  }
+
+  open() {
+    this.step = 0;
+    this._active = true;
+    this.bus.emit('calibration:open', this.currentStep);
+  }
+
+  close() {
+    this._active = false;
+    clearTimeout(this._timer);
+    this.bus.emit('calibration:close');
+  }
+
+  next() {
+    if (this.step < this.steps.length - 1) {
+      this.step++;
+      this.bus.emit('calibration:step', this.currentStep);
+    } else {
+      this.bus.emit('calibration:complete', this.results);
+      this.close();
+    }
+  }
+
+  prev() {
+    if (this.step > 0) {
+      this.step--;
+      this.bus.emit('calibration:step', this.currentStep);
+    }
+  }
+
+  /**
+   * Start collecting samples for current step.
+   * @param {number} durationMs
+   */
+  startCapture(durationMs = 5000) {
+    this._samples = [];
+    const onSample = (sample) => this._samples.push(sample);
+    this.bus.on('sensor:sample', onSample);
+    this._timer = setTimeout(() => {
+      this.bus.off('sensor:sample', onSample);
+      this._processStep();
+      this.next();
+    }, durationMs);
+    this.bus.emit('calibration:capturing', { step: this.currentStep.id, durationMs });
+  }
+
+  _processStep() {
+    const id = this.currentStep.id;
+    if (!this._samples.length) return;
+    if (id === 'gravity') {
+      const n = this._samples.length;
+      const avg = this._samples.reduce((a, s) => ({
+        x: a.x + s.accel.x, y: a.y + s.accel.y, z: a.z + s.accel.z,
+      }), { x: 0, y: 0, z: 0 });
+      this.results.gravity = { x: avg.x / n, y: avg.y / n, z: avg.z / n };
+    } else if (id === 'drift') {
+      this.results.drift = { stationary: true, sampleCount: this._samples.length };
+    } else if (id === 'sensor') {
+      const n = this._samples.length;
+      const avg = this._samples.reduce((a, s) => ({
+        x: a.x + s.gyro.x, y: a.y + s.gyro.y, z: a.z + s.gyro.z,
+      }), { x: 0, y: 0, z: 0 });
+      this.results.gyroBias = { x: avg.x / n, y: avg.y / n, z: avg.z / n };
+    }
+    this.bus.emit('calibration:result', { step: id, results: this.results });
+  }
+}
+
+CalibrationWizard;
+
+
+/**
+ * JSON recording format import/export.
+ * @module io/JsonFormat
+ */
+
+const JSON_MAGIC = 'MCS_JSON';
+
+/**
+ * @param {{ metadata: Object, samples: Array }} recording
+ * @returns {Blob}
+ */
+function exportJson(recording) {
+  const payload = {
+    magic: JSON_MAGIC,
+    ...recording,
+  };
+  return new Blob([JSON.stringify(payload)], { type: 'application/json' });
+}
+
+/**
+ * @param {string} text
+ * @returns {{ metadata: Object, samples: Array }}
+ */
+function importJson(text) {
+  const data = JSON.parse(text);
+  if (!data.samples || !Array.isArray(data.samples)) {
+    throw new Error('Invalid JSON recording: missing samples array.');
+  }
+  return { metadata: data.metadata ?? {}, samples: data.samples };
+}
+
+{ exportJson, importJson };
+
+
+/**
+ * CRC-32 integrity checking for binary recordings.
+ * @module utils/crc32
+ */
+
+/** @type {Uint32Array} */
+const TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let k = 0; k < 8; k++) {
+      c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    }
+    t[i] = c >>> 0;
+  }
+  return t;
+})();
+
+/**
+ * Compute CRC-32 over byte array.
+ * @param {Uint8Array} data
+ * @param {number} [seed=0xffffffff]
+ * @returns {number}
+ */
+function crc32(data, seed = 0xffffffff) {
+  let crc = seed;
+  for (let i = 0; i < data.length; i++) {
+    crc = TABLE[(crc ^ data[i]) & 0xff] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+crc32;
+
+
+/**
+ * Compressed binary recording format with CRC and chunk structure.
+ * @module io/BinaryFormat
+ */
+
+
+const MAGIC = 0x4D435300; // 'MCS\0'
+const VERSION = 1;
+const CHUNK_META = 0x4D455441; // 'META'
+const CHUNK_DATA = 0x44415441; // 'DATA'
+
+/**
+ * Encode recording to compressed binary blob.
+ * @param {{ metadata: Object, samples: Array }} recording
+ * @returns {Promise<Blob>}
+ */
+export async function exportBinary(recording) {
+  const metaBytes = new TextEncoder().encode(JSON.stringify(recording.metadata));
+  const n = recording.samples.length;
+  const dataSize = n * 16 * 4; // 16 floats per sample
+  const buf = new ArrayBuffer(32 + metaBytes.length + 12 + dataSize + 4);
+  const view = new DataView(buf);
+  let off = 0;
+
+  view.setUint32(off, MAGIC, true); off += 4;
+  view.setUint16(off, VERSION, true); off += 2;
+  view.setUint16(off, 0, true); off += 2; // flags — reserved for gzip/LZ4
+  view.setUint32(off, n, true); off += 4;
+  view.setFloat64(off, recording.samples[0]?.timestamp ?? 0, true); off += 8;
+
+  // META chunk
+  view.setUint32(off, CHUNK_META, true); off += 4;
+  view.setUint32(off, metaBytes.length, true); off += 4;
+  new Uint8Array(buf, off, metaBytes.length).set(metaBytes);
+  off += metaBytes.length;
+
+  // DATA chunk — packed floats: ts, dt, ax,ay,az, gx,gy,gz, qw,qx,qy,qz, px,py,pz, dist
+  view.setUint32(off, CHUNK_DATA, true); off += 4;
+  view.setUint32(off, dataSize, true); off += 4;
+  for (let i = 0; i < n; i++) {
+    const s = recording.samples[i];
+    const p = s.processed;
+    view.setFloat32(off, s.timestamp, true); off += 4;
+    view.setFloat32(off, s.dt, true); off += 4;
+    view.setFloat32(off, s.accel.x, true); off += 4;
+    view.setFloat32(off, s.accel.y, true); off += 4;
+    view.setFloat32(off, s.accel.z, true); off += 4;
+    view.setFloat32(off, s.gyro.x, true); off += 4;
+    view.setFloat32(off, s.gyro.y, true); off += 4;
+    view.setFloat32(off, s.gyro.z, true); off += 4;
+    const q = p?.quaternion ?? { w: 1, x: 0, y: 0, z: 0 };
+    view.setFloat32(off, q.w, true); off += 4;
+    view.setFloat32(off, q.x, true); off += 4;
+    view.setFloat32(off, q.y, true); off += 4;
+    view.setFloat32(off, q.z, true); off += 4;
+    const pos = p?.position ?? { x: 0, y: 0, z: 0 };
+    view.setFloat32(off, pos.x, true); off += 4;
+    view.setFloat32(off, pos.y, true); off += 4;
+    view.setFloat32(off, pos.z, true); off += 4;
+    view.setFloat32(off, p?.distance ?? 0, true); off += 4;
+  }
+
+  const body = new Uint8Array(buf, 0, off);
+  const checksum = crc32(body);
+  const finalBuf = new ArrayBuffer(off + 4);
+  new Uint8Array(finalBuf).set(body);
+  new DataView(finalBuf).setUint32(off, checksum, true);
+
+  return new Blob([finalBuf], { type: 'application/octet-stream' });
+}
+
+/**
+ * @param {ArrayBuffer} buffer
+ * @returns {Promise<{ metadata: Object, samples: Array }>}
+ */
+export async function importBinary(buffer) {
+  const view = new DataView(buffer);
+  if (view.byteLength < 20) throw new Error('File too small to be a valid MCS binary recording.');
+
+  const magic = view.getUint32(0, true);
+  if (magic !== MAGIC) throw new Error('Unknown binary format (invalid magic).');
+
+  const version = view.getUint16(4, true);
+  if (version > VERSION) throw new Error(`Unsupported binary version: ${version}`);
+
+  const checksumStored = view.getUint32(buffer.byteLength - 4, true);
+  const body = new Uint8Array(buffer, 0, buffer.byteLength - 4);
+  if (crc32(body) !== checksumStored) throw new Error('Corrupt file: CRC mismatch.');
+
+  const sampleCount = view.getUint32(8, true);
+  let off = 20;
+  let metadata = {};
+
+  while (off < buffer.byteLength - 4) {
+    const chunkId = view.getUint32(off, true); off += 4;
+    const chunkLen = view.getUint32(off, true); off += 4;
+    if (chunkId === CHUNK_META) {
+      metadata = JSON.parse(new TextDecoder().decode(new Uint8Array(buffer, off, chunkLen)));
+      off += chunkLen;
+    } else if (chunkId === CHUNK_DATA) {
+      const samples = [];
+      const floatsPer = 16;
+      for (let i = 0; i < sampleCount; i++) {
+        const base = off + i * floatsPer * 4;
+        const ts = view.getFloat32(base, true);
+        const dt = view.getFloat32(base + 4, true);
+        const accel = { x: view.getFloat32(base + 8, true), y: view.getFloat32(base + 12, true), z: view.getFloat32(base + 16, true) };
+        const gyro = { x: view.getFloat32(base + 20, true), y: view.getFloat32(base + 24, true), z: view.getFloat32(base + 28, true) };
+        const q = { w: view.getFloat32(base + 32, true), x: view.getFloat32(base + 36, true), y: view.getFloat32(base + 40, true), z: view.getFloat32(base + 44, true) };
+        const pos = { x: view.getFloat32(base + 48, true), y: view.getFloat32(base + 52, true), z: view.getFloat32(base + 56, true) };
+        const dist = view.getFloat32(base + 60, true);
+        samples.push({
+          timestamp: ts, dt, accel, gyro,
+          processed: { position: pos, quaternion: q, distance: dist, velocity: { x: 0, y: 0, z: 0 }, euler: { x: 0, y: 0, z: 0 }, linearAccel: accel, rotationSpeed: 0, gForce: 0 },
+        });
+      }
+      return { metadata, samples };
+    } else {
+      off += chunkLen;
+    }
+  }
+  throw new Error('Invalid binary file: missing DATA chunk.');
+}
+
+{ exportBinary, importBinary };
+
+
+/**
+ * Unified import/export with format auto-detection.
+ * @module io/ImportExport
+ */
+
+
+/**
+ * @param {{ metadata: Object, samples: Array }} recording
+ * @param {'json'|'binary'} format
+ * @returns {Promise<Blob>}
+ */
+export async function exportRecording(recording, format) {
+  if (format === 'binary') return exportBinary(recording);
+  return exportJson(recording);
+}
+
+/**
+ * @param {File|Blob} file
+ * @returns {Promise<{ metadata: Object, samples: Array }>}
+ */
+export async function importRecording(file) {
+  const name = file.name?.toLowerCase() ?? '';
+  if (name.endsWith('.json')) {
+    const text = await file.text();
+    return importJson(text);
+  }
+  if (name.endsWith('.mcs') || name.endsWith('.bin')) {
+    return importBinary(await file.arrayBuffer());
+  }
+
+  // Auto-detect
+  const buf = await file.arrayBuffer();
+  const view = new DataView(buf);
+  if (buf.byteLength >= 4 && view.getUint32(0, true) === 0x4D435300) {
+    return importBinary(buf);
+  }
+  try {
+    return importJson(new TextDecoder().decode(buf));
+  } catch {
+    throw new Error('Unable to detect file format. Use .json or .mcs files.');
+  }
+}
+
+/**
+ * Suggested filename for export.
+ * @param {string} name
+ * @param {'json'|'binary'} format
+ */
+function suggestFilename(name, format) {
+  const safe = name.replace(/[^\w\- ]+/g, '').trim() || 'recording';
+  return format === 'binary' ? `${safe}.mcs` : `${safe}.json`;
+}
+
+{ exportRecording, importRecording, suggestFilename };
+
+
+/**
+ * Main UI shell: panels, controls, menus, overlays.
+ * @module ui/UIManager
+ */
+
+
+/**
+ * Builds and wires the application UI.
+ */
+class UIManager {
+  /**
+   * @param {import('../core/Application.js').Application} app
+   */
+  constructor(app) {
+    this.app = app;
+    this.bus = app.bus;
+    this.root = document.getElementById('app');
+    this._buildShell();
+    this.notify = new NotificationManager(document.getElementById('toasts'));
+    this.palette = new CommandPalette(document.getElementById('cmd-palette'), this.bus);
+    this.panels = new PanelManager();
+    this.keyboard = new KeyboardManager();
+    this.context = new ContextMenu(this.root);
+    this.graphs = new GraphManager(document.getElementById('graph-panel'), this.bus);
+    this.timeline = new Timeline(document.getElementById('timeline-canvas'), this.bus);
+    this.stats = new StatisticsEngine();
+    this.calibration = new CalibrationWizard(this.bus);
+
+    this._wireEvents();
+    this._registerCommands();
+    this._registerShortcuts();
+    this._setupDropZone();
+    this.resize();
+    window.addEventListener('resize', () => this.resize());
+  }
+
+  _buildShell() {
+    this.root.innerHTML = `
+      <header class="menubar glass">
+        <div class="logo">Motion Capture Studio</div>
+        <nav class="menu">
+          <button data-menu="file">File</button>
+          <button data-menu="edit">Edit</button>
+          <button data-menu="view">View</button>
+          <button data-menu="record">Record</button>
+          <button data-menu="playback">Playback</button>
+          <button data-menu="tools">Tools</button>
+          <button data-menu="help">Help</button>
+        </nav>
+        <span class="unsaved-indicator hidden" id="unsaved">● Unsaved</span>
+      </header>
+      <div class="toolbar glass" id="toolbar">
+        <button class="tb-btn" data-action="new" title="New recording">New</button>
+        <button class="tb-btn" data-action="open" title="Open file">Open</button>
+        <button class="tb-btn" data-action="save" title="Save">Save</button>
+        <span class="tb-sep"></span>
+        <button class="tb-btn accent" data-action="record" title="Start/Stop recording">⏺ Record</button>
+        <select id="sample-rate" title="Sample rate">
+          <option value="30">30 Hz</option>
+          <option value="60" selected>60 Hz</option>
+          <option value="120">120 Hz</option>
+        </select>
+        <span class="tb-sep"></span>
+        <button class="tb-btn" data-action="play">▶</button>
+        <button class="tb-btn" data-action="pause">⏸</button>
+        <button class="tb-btn" data-action="stop">⏹</button>
+        <button class="tb-btn" data-action="reverse">◀</button>
+        <button class="tb-btn" data-action="prev-frame">⏮</button>
+        <button class="tb-btn" data-action="next-frame">⏭</button>
+        <label class="tb-label">Speed <input type="range" id="playback-speed" min="0.05" max="4" step="0.05" value="1"></label>
+        <span id="speed-label">1.00×</span>
+      </div>
+      <main class="workspace">
+        <aside class="panel left glass" id="file-panel">
+          <h3>File</h3>
+          <div class="panel-body" id="file-list"></div>
+          <div class="resize-handle" data-resize="#file-panel" data-side="left"></div>
+        </aside>
+        <section class="viewport-wrap">
+          <div id="viewport"></div>
+          <div class="viewport-overlay">
+            <select id="camera-mode" title="Camera mode">
+              <option value="orbit">Orbit</option>
+              <option value="free">Free</option>
+              <option value="follow">Auto Follow</option>
+            </select>
+            <select id="trail-mode">
+              <option value="line">Line Trail</option>
+              <option value="ribbon">Ribbon</option>
+              <option value="heatmap">Heat Map</option>
+              <option value="ghost">Ghost Phones</option>
+            </select>
+            <button class="tb-btn" data-action="reset-camera">Reset Camera</button>
+            <button class="tb-btn" data-action="screenshot">Screenshot</button>
+          </div>
+        </section>
+        <aside class="panel right glass" id="side-panel">
+          <div class="tabs">
+            <button class="tab active" data-tab="stats">Statistics</button>
+            <button class="tab" data-tab="graphs">Graphs</button>
+            <button class="tab" data-tab="settings">Settings</button>
+            <button class="tab" data-tab="debug">Debug</button>
+          </div>
+          <div class="tab-panel active" id="tab-stats"><div id="stats-panel" class="stats-grid"></div></div>
+          <div class="tab-panel" id="tab-graphs"><div id="graph-panel" class="graph-grid"></div></div>
+          <div class="tab-panel" id="tab-settings"><div id="settings-panel" class="settings-form"></div></div>
+          <div class="tab-panel" id="tab-debug"><pre id="debug-panel" class="debug-pre"></pre></div>
+          <div class="resize-handle right" data-resize="#side-panel" data-side="right"></div>
+        </aside>
+      </main>
+      <footer class="timeline-bar glass">
+        <canvas id="timeline-canvas"></canvas>
+      </footer>
+      <footer class="statusbar glass">
+        <span id="status-left">Ready</span>
+        <span id="status-center"></span>
+        <span id="status-right">FPS — | Samples —</span>
+      </footer>
+      <div id="loading" class="loading-overlay hidden"><div class="spinner"></div><p>Loading…</p></div>
+      <input type="file" id="file-input" accept=".json,.mcs,.bin" hidden>
+    `;
+
+    document.getElementById('cmd-palette')?.remove();
+    const palette = document.createElement('div');
+    palette.id = 'cmd-palette';
+    palette.className = 'cmd-palette';
+    palette.innerHTML = `<div class="cmd-box glass"><input class="cmd-input" placeholder="Type a command…"><button class="cmd-close">×</button><div class="cmd-list"></div></div>`;
+    this.root.appendChild(palette);
+
+    this._buildSettingsForm();
+    this._buildFilePanel();
+  }
+
+  _buildSettingsForm() {
+    const el = document.getElementById('settings-panel');
+    el.innerHTML = `
+      <label>Filter Mode <select id="set-filter"><option value="madgwick">Madgwick (Filtered)</option><option value="raw">Raw Integration</option></select></label>
+      <label>Theme <select id="set-theme"><option value="dark">Dark</option><option value="light">Light</option></select></label>
+      <label><input type="checkbox" id="set-grid" checked> Show Grid</label>
+      <label><input type="checkbox" id="set-shadows" checked> Shadows</label>
+      <label><input type="checkbox" id="set-bloom" checked> Bloom</label>
+      <label><input type="checkbox" id="set-wireframe"> Phone Wireframe</label>
+      <label>Motion Smoothing <input type="range" id="set-smoothing" min="0" max="1" step="0.01" value="0.15"></label>
+      <label>Units <select id="set-units"><option value="ms2">m/s²</option><option value="g">g</option></select></label>
+      <button class="tb-btn" id="set-reset">Reset Settings</button>
+      <button class="tb-btn" id="set-calibrate">Calibration Wizard…</button>
+    `;
+  }
+
+  _buildFilePanel() {
+    const el = document.getElementById('file-list');
+    el.innerHTML = `
+      <button class="tb-btn block" data-action="new">New</button>
+      <button class="tb-btn block" data-action="open">Open…</button>
+      <button class="tb-btn block" data-action="save">Save</button>
+      <button class="tb-btn block" data-action="save-as">Save As…</button>
+      <button class="tb-btn block" data-action="duplicate">Duplicate</button>
+      <button class="tb-btn block" data-action="rename">Rename</button>
+      <button class="tb-btn block" data-action="delete">Delete</button>
+      <h4>Recent</h4>
+      <ul id="recent-list" class="recent-list"></ul>
+      <h4>Export Format</h4>
+      <select id="export-format"><option value="json">JSON</option><option value="binary">Binary (.mcs)</option></select>
+    `;
+  }
+
+  _wireEvents() {
+    const { bus, app } = this;
+
+    this.root.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-action]');
+      if (!btn) return;
+      this._handleAction(btn.dataset.action);
+    });
+
+    document.querySelectorAll('.tab').forEach((tab) => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach((t) => t.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach((p) => p.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById(`tab-${tab.dataset.tab}`)?.classList.add('active');
+        this.resize();
+      });
+    });
+
+    document.getElementById('sample-rate')?.addEventListener('change', (e) => {
+      const rate = Number(e.target.value);
+      app.settings.set('sampleRate', rate);
+      app.sensors.setSampleRate(rate);
+    });
+
+    document.getElementById('playback-speed')?.addEventListener('input', (e) => {
+      const v = Number(e.target.value);
+      document.getElementById('speed-label').textContent = `${v.toFixed(2)}×`;
+      app.playback.setSpeed(v);
+      app.settings.set('playbackSpeed', v);
+    });
+
+    document.getElementById('camera-mode')?.addEventListener('change', (e) => {
+      app.settings.set('cameraMode', e.target.value);
+      app.renderer.applySettings({ cameraMode: e.target.value });
+    });
+
+    document.getElementById('trail-mode')?.addEventListener('change', (e) => {
+      app.settings.set('trailMode', e.target.value);
+      app.renderer.applySettings({ trailMode: e.target.value });
+    });
+
+    document.getElementById('set-filter')?.addEventListener('change', (e) => {
+      app.motion.setFilter(e.target.value);
+      app.settings.set('filterMode', e.target.value);
+    });
+
+    document.getElementById('set-theme')?.addEventListener('change', (e) => app.settings.set('theme', e.target.value));
+    document.getElementById('set-grid')?.addEventListener('change', (e) => {
+      app.settings.set('gridVisible', e.target.checked);
+      app.renderer.applySettings({ gridVisible: e.target.checked });
+    });
+    document.getElementById('set-shadows')?.addEventListener('change', (e) => {
+      app.settings.set('shadowsEnabled', e.target.checked);
+      app.renderer.applySettings({ shadowsEnabled: e.target.checked });
+    });
+    document.getElementById('set-wireframe')?.addEventListener('change', (e) => {
+      app.settings.set('phoneWireframe', e.target.checked);
+      app.renderer.applySettings({ phoneWireframe: e.target.checked });
+    });
+    document.getElementById('set-smoothing')?.addEventListener('input', (e) => {
+      app.settings.set('motionSmoothing', Number(e.target.value));
+      app.motion.setSmoothing(Number(e.target.value));
+    });
+    document.getElementById('set-reset')?.addEventListener('click', () => app.settings.reset());
+    document.getElementById('set-calibrate')?.addEventListener('click', () => this._showCalibration());
+
+    document.getElementById('file-input')?.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      if (file) await this._importFile(file);
+      e.target.value = '';
+    });
+
+    bus.on('sensor:sample', (sample) => this._onLiveSample(sample));
+    bus.on('recording:sample', () => this._refreshUnsaved());
+    bus.on('playback:frame', (f) => this._onPlaybackFrame(f));
+    bus.on('timeline:seek', (t) => app.playback.seek(t));
+    bus.on('recording:loaded', () => this._onRecordingLoaded());
+    bus.on('renderer:stats', (s) => this._updateStatus(s));
+    bus.on('error', (err) => this.notify.show(err.message ?? String(err), 'error', 6000));
+    bus.on('calibration:open', (step) => this._showCalibration(step));
+  }
+
+  async _handleAction(action) {
+    const { app } = this;
+    switch (action) {
+      case 'new': app.fileManager.newRecording(); break;
+      case 'open': document.getElementById('file-input')?.click(); break;
+      case 'save': await this._save(false); break;
+      case 'save-as': await this._save(true); break;
+      case 'duplicate': app.fileManager.duplicate(); break;
+      case 'rename': {
+        const name = prompt('Recording name:', app.recorder.metadata.name);
+        if (name) app.fileManager.rename(name);
+        break;
+      }
+      case 'delete': app.fileManager.deleteRecording(); break;
+      case 'record': await app.toggleRecording(); break;
+      case 'play': app.playback.play(); break;
+      case 'pause': app.playback.pause(); break;
+      case 'stop': app.playback.stop(); break;
+      case 'reverse': app.playback.reverse(); break;
+      case 'prev-frame': app.playback.prevFrame(); break;
+      case 'next-frame': app.playback.nextFrame(); break;
+      case 'reset-camera': app.renderer.cameraCtrl.reset(); break;
+      case 'screenshot': this._screenshot(); break;
+      default: break;
+    }
+  }
+
+  async _save(saveAs) {
+    const format = document.getElementById('export-format')?.value === 'binary' ? 'binary' : 'json';
+    const recording = this.app.recorder.getRecording();
+    const blob = await exportRecording(recording, format);
+    const name = suggestFilename(recording.metadata.name, format);
+    await this.app.fileManager.saveAs(blob, name);
+    this.notify.show('Recording saved.', 'success');
+  }
+
+  async _importFile(file) {
+    this.showLoading(true);
+    try {
+      const data = await importRecording(file);
+      this.app.loadRecording(data);
+      this.notify.show(`Loaded ${file.name}`, 'success');
+    } catch (err) {
+      this.notify.show(err.message, 'error');
+    } finally {
+      this.showLoading(false);
+    }
+  }
+
+  _setupDropZone() {
+    const zone = this.root;
+    zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('drag-over'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+    zone.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      zone.classList.remove('drag-over');
+      const file = e.dataTransfer?.files?.[0];
+      if (file) await this._importFile(file);
+    });
+  }
+
+  _onLiveSample(sample) {
+    const processed = this.app.motion.process(sample);
+    const enriched = { ...sample, processed };
+    if (this.app.recorder.recording) {
+      this.app.recorder.addSample(enriched);
+    }
+    this.graphs.updateLive(enriched);
+    this._updateDebug(enriched, processed);
+    if (processed.position && processed.quaternion) {
+      this.app.renderer.updatePhone(processed.position, processed.quaternion);
+    }
+    this._updateTrail();
+  }
+
+  _onPlaybackFrame({ time, frame, fps }) {
+    this.timeline.setPlayhead(time);
+    if (!frame) return;
+    const p = frame.processed;
+    if (p?.position && p?.quaternion) {
+      this.app.renderer.updatePhone(p.position, p.quaternion);
+    }
+    this.graphs.updateLive(frame);
+    this._updateDebug(frame, p);
+    this._updateTrail(Math.floor(time / (this.app.playback.duration || 1) * this.app.recorder.count));
+    const stats = this.stats.compute(this.app.recorder.samples, fps);
+    this._renderStats(stats);
+  }
+
+  _onRecordingLoaded() {
+    const { recorder, playback } = this.app;
+    playback.setSamples(recorder.samples);
+    this.timeline.setData(recorder.metadata.duration, recorder.count);
+    const stats = this.stats.compute(recorder.samples);
+    this._renderStats(stats);
+    this._updateTrail();
+    this._refreshRecent();
+    this._refreshUnsaved();
+  }
+
+  _updateTrail(upToIndex) {
+    const points = this.app.recorder.samples
+      .filter((s) => s.processed?.position)
+      .map((s) => ({ position: s.processed.position, quaternion: s.processed.quaternion }));
+    this.app.renderer.updateTrail(points, upToIndex);
+  }
+
+  _renderStats(stats) {
+    const el = document.getElementById('stats-panel');
+    el.innerHTML = this.stats.toDisplayRows().map((r) =>
+      `<div class="stat-row"><span>${r.label}</span><strong>${r.value}</strong></div>`,
+    ).join('');
+  }
+
+  _updateDebug(sample, processed) {
+    const el = document.getElementById('debug-panel');
+    if (!el) return;
+    el.textContent = JSON.stringify({
+      rawAccel: sample.accel,
+      rawGyro: sample.gyro,
+      filtered: processed?.linearAccel,
+      quaternion: processed?.quaternion,
+      euler: processed?.euler,
+      dt: sample.dt,
+      fps: this.app.renderer.fps,
+      renderMs: this.app.renderer.renderTime.toFixed(2),
+      frame: this.app.recorder.count ? Math.round((this.app.playback.currentTime / (this.app.playback.duration || 1)) * this.app.recorder.count) : 0,
+    }, null, 2);
+  }
+
+  _updateStatus({ fps, renderTime }) {
+    document.getElementById('status-right').textContent =
+      `Render ${fps} FPS (${renderTime.toFixed(1)} ms) | Samples ${this.app.recorder.count}`;
+  }
+
+  _refreshUnsaved() {
+    document.getElementById('unsaved')?.classList.toggle('hidden', !this.app.recorder.unsaved);
+  }
+
+  _refreshRecent() {
+    const list = document.getElementById('recent-list');
+    const recent = this.app.fileManager.getRecent();
+    list.innerHTML = recent.map((r) => `<li>${r}</li>`).join('') || '<li class="muted">No recent files</li>';
+  }
+
+  _screenshot() {
+    const url = this.app.renderer.screenshot();
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'viewport.png';
+    a.click();
+    this.notify.show('Screenshot saved.', 'success');
+  }
+
+  _showCalibration(step) {
+    const s = step ?? this.calibration.currentStep;
+    const dlg = document.createElement('div');
+    dlg.className = 'modal glass';
+    dlg.innerHTML = `
+      <div class="modal-box">
+        <h2>${s.title}</h2>
+        <p>${s.description}</p>
+        <p class="muted"><strong>When:</strong> ${s.when}</p>
+        <p class="muted"><strong>Expected improvement:</strong> ${s.improvement}</p>
+        <div class="modal-actions">
+          <button id="cal-prev">Back</button>
+          <button id="cal-capture" class="accent">Start Capture</button>
+          <button id="cal-next">Next</button>
+          <button id="cal-close">Close</button>
+        </div>
+      </div>`;
+    this.root.appendChild(dlg);
+    dlg.querySelector('#cal-capture')?.addEventListener('click', () => this.calibration.startCapture());
+    dlg.querySelector('#cal-prev')?.addEventListener('click', () => this.calibration.prev());
+    dlg.querySelector('#cal-next')?.addEventListener('click', () => this.calibration.next());
+    dlg.querySelector('#cal-close')?.addEventListener('click', () => { dlg.remove(); this.calibration.close(); });
+    this.calibration.open();
+  }
+
+  _registerCommands() {
+    const a = this.app;
+    this.palette.register([
+      { id: 'new', label: 'New Recording', category: 'File', action: () => a.fileManager.newRecording() },
+      { id: 'open', label: 'Open File', category: 'File', action: () => document.getElementById('file-input')?.click() },
+      { id: 'save', label: 'Save', category: 'File', action: () => this._save(false) },
+      { id: 'record', label: 'Toggle Record', category: 'Record', action: () => a.toggleRecording() },
+      { id: 'play', label: 'Play', category: 'Playback', action: () => a.playback.play() },
+      { id: 'pause', label: 'Pause', category: 'Playback', action: () => a.playback.pause() },
+      { id: 'cal', label: 'Calibration Wizard', category: 'Tools', action: () => this._showCalibration() },
+      { id: 'palette', label: 'Command Palette', category: 'View', action: () => this.palette.show() },
+      { id: 'screenshot', label: 'Screenshot Viewport', category: 'View', action: () => this._screenshot() },
+      { id: 'filter-m', label: 'Filter: Madgwick', category: 'Motion', action: () => a.motion.setFilter('madgwick') },
+      { id: 'filter-r', label: 'Filter: Raw', category: 'Motion', action: () => a.motion.setFilter('raw') },
+    ]);
+  }
+
+  _registerShortcuts() {
+    const a = this.app;
+    this.keyboard.register([
+      { key: 'p', ctrl: true, shift: true, action: () => this.palette.toggle(), label: 'Command Palette' },
+      { key: ' ', ctrl: false, shift: false, action: () => a.recorder.recording ? a.toggleRecording() : a.playback.play(), label: 'Play/Record' },
+      { key: 's', ctrl: true, action: () => this._save(false), label: 'Save' },
+      { key: 'o', ctrl: true, action: () => document.getElementById('file-input')?.click(), label: 'Open' },
+      { key: 'ArrowLeft', action: () => a.playback.prevFrame(), label: 'Previous Frame' },
+      { key: 'ArrowRight', action: () => a.playback.nextFrame(), label: 'Next Frame' },
+    ]);
+  }
+
+  showLoading(show) {
+    document.getElementById('loading')?.classList.toggle('hidden', !show);
+  }
+
+  resize() {
+    this.timeline.resize();
+    this.graphs.resizeAll();
+  }
+
+  setStatus(msg) {
+    document.getElementById('status-left').textContent = msg;
+  }
+}
+
+UIManager;
+
+
+/**
+ * Application root — orchestrates all subsystems.
+ * @module core/Application
+ */
+
+
+/**
+ * Main application controller.
+ */
+class Application {
+  constructor() {
+    this.bus = new EventBus();
+    this.plugins = new PluginAPI();
+    this.settings = new SettingsManager(this.bus);
+    this.sensors = new SensorManager(this.bus);
+    this.motion = new MotionProcessor(this.bus);
+    this.recorder = new Recorder(this.bus);
+    this.fileManager = new RecordingManager(this.bus, this.recorder);
+    this.playback = new PlaybackEngine(this.bus);
+    this.renderer = null;
+    this.ui = null;
+    this._liveMode = false;
+  }
+
+  /**
+   * Bootstrap DOM-dependent systems.
+   */
+  async init() {
+    const viewport = document.getElementById('viewport');
+    if (!viewport) throw new Error('Viewport element not found.');
+
+    this.ui = new UIManager(this);
+    this.renderer = new SceneRenderer(viewport, this.bus);
+
+    const s = this.settings.settings;
+    this.motion.setFilter(s.filterMode);
+    this.motion.setSampleRate(s.sampleRate);
+    this.motion.setSmoothing(s.motionSmoothing);
+    this.sensors.setSampleRate(s.sampleRate);
+    this.renderer.applySettings({
+      gridVisible: s.gridVisible,
+      shadowsEnabled: s.shadowsEnabled,
+      trailMode: s.trailMode,
+      phoneWireframe: s.phoneWireframe,
+      cameraMode: s.cameraMode,
+      autoFollowSmoothing: s.autoFollowSmoothing,
+    });
+
+    this.playback.setSpeed(s.playbackSpeed);
+    this.fileManager.startAutosave();
+    await this._checkRecovery();
+    this._checkBrowserSupport();
+    this.ui.setStatus('Ready — use Record on a motion-capable device');
+    this.bus.emit('app:ready');
+  }
+
+  _checkBrowserSupport() {
+    const av = this.sensors.availability;
+    if (!av.accelerometer) {
+      this.bus.emit('error', {
+        code: 'UNSUPPORTED',
+        message: 'Device motion sensors unavailable. You can still import recordings for playback and analysis.',
+      });
+    }
+  }
+
+  async _checkRecovery() {
+    const saved = await this.fileManager.recoverAutosave();
+    if (saved?.samples?.length) {
+      if (confirm('Recover unsaved recording from auto-save?')) {
+        this.loadRecording(saved);
+        this.ui.notify.show('Recording recovered from auto-save.', 'success');
+      } else {
+        await this.fileManager.clearAutosave();
+      }
+    }
+  }
+
+  /**
+   * @param {{ metadata: Object, samples: Array }} data
+   */
+  loadRecording(data) {
+    this.motion.reset();
+    this.motion.setFilter(data.metadata.filterMode ?? 'madgwick');
+    this.recorder.load(data);
+    this.playback.setSamples(this.recorder.samples);
+    this.ui.timeline.setData(this.recorder.metadata.duration, this.recorder.count);
+    this.ui.stats.compute(this.recorder.samples);
+    this.ui._onRecordingLoaded();
+  }
+
+  /** Toggle live recording. */
+  async toggleRecording() {
+    if (this.recorder.recording) {
+      this.recorder.stop();
+      this.sensors.stop();
+      this._liveMode = false;
+      this.ui.setStatus('Recording stopped');
+      this.ui.stats.compute(this.recorder.samples);
+      this.ui._renderStats(this.ui.stats.stats);
+      this.playback.setSamples(this.recorder.samples);
+      this.ui.timeline.setData(this.recorder.metadata.duration, this.recorder.count);
+      return;
+    }
+
+    const rate = this.settings.get('sampleRate');
+    const filter = this.settings.get('filterMode');
+    this.motion.reset();
+    this.motion.setFilter(filter);
+    const ok = await this.sensors.start();
+    if (!ok) return;
+
+    this.recorder.start(rate, this.sensors.availability, filter);
+    this._liveMode = true;
+    this.ui.setStatus('Recording…');
+    this.ui.notify.show('Recording started', 'success');
+  }
+}
+
+Application;
+
+
+/**
+ * Motion Capture Studio entry point.
+ * @module main
+ */
+
+
+const app = new Application();
+
+document.addEventListener('DOMContentLoaded', async () => {
+  try {
+    await app.init();
+  } catch (err) {
+    console.error('Failed to start Motion Capture Studio:', err);
+    const el = document.getElementById('app');
+    if (el) {
+      el.innerHTML = `<div class="fatal-error glass"><h1>Startup Error</h1><p>${err.message}</p></div>`;
+    }
+  }
+});
+
+// Developer console hook
+if (typeof window !== 'undefined') {
+  window.MCS = app;
+}
+
+app;
+
+
+</script>
+</body>
+</html>
