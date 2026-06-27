@@ -22,6 +22,7 @@ export class SensorManager {
     this._onMotion = null;
     this._sampleReceived = false;
     this._watchdog = null;
+    this._sensorsPrimed = false;
     this.availability = this._detectAvailability();
   }
 
