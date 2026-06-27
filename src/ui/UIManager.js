@@ -12,7 +12,7 @@ import { GraphManager } from '../graphs/GraphManager.js';
 import { Timeline } from '../timeline/Timeline.js';
 import { StatisticsEngine } from '../statistics/StatisticsEngine.js';
 import { CalibrationWizard } from '../calibration/CalibrationWizard.js';
-import { exportRecording, importRecording, suggestFilename } from '../io/ImportExport.js';
+import { formatError } from '../utils/formatError.js';
 
 /**
  * Builds and wires the application UI.
@@ -42,6 +42,7 @@ export class UIManager {
     this._registerCommands();
     this._registerShortcuts();
     this._setupDropZone();
+    this._setupMobileSensorBanner();
     this.resize();
     window.addEventListener('resize', () => this.resize());
   }
@@ -129,6 +130,10 @@ export class UIManager {
         <span id="status-right">FPS — | Samples —</span>
       </footer>
       <div id="loading" class="loading-overlay hidden"><div class="spinner"></div><p>Loading…</p></div>
+      <div id="sensor-banner" class="sensor-banner glass hidden">
+        <p><strong>Motion sensors required</strong> — Tap Enable, then allow sensor access when prompted.</p>
+        <button class="tb-btn accent" type="button" data-action="enable-sensors">Enable Sensors</button>
+      </div>
       <input type="file" id="file-input" accept=".json,.mcs,.bin" hidden>
     `;
 
@@ -258,7 +263,7 @@ export class UIManager {
     bus.on('timeline:seek', (t) => app.playback.seek(t));
     bus.on('recording:loaded', () => this._onRecordingLoaded());
     bus.on('renderer:stats', (s) => this._updateStatus(s));
-    bus.on('error', (err) => this.notify.show(err.message ?? String(err), 'error', 6000));
+    bus.on('error', (err) => this.notify.show(formatError(err), 'error', 8000));
     bus.on('calibration:open', (step) => this._showCalibration(step));
   }
 
@@ -285,6 +290,7 @@ export class UIManager {
       case 'next-frame': app.playback.nextFrame(); break;
       case 'reset-camera': app.renderer.cameraCtrl.reset(); break;
       case 'screenshot': this._screenshot(); break;
+      case 'enable-sensors': this._enableSensors(); break;
       default: break;
     }
   }
@@ -308,6 +314,22 @@ export class UIManager {
       this.notify.show(err.message, 'error');
     } finally {
       this.showLoading(false);
+    }
+  }
+
+  _setupMobileSensorBanner() {
+    const banner = document.getElementById('sensor-banner');
+    const av = this.app.sensors.availability;
+    if (!banner || !av.needsMobileEnable || !av.accelerometer) return;
+    banner.classList.remove('hidden');
+  }
+
+  async _enableSensors() {
+    const banner = document.getElementById('sensor-banner');
+    const ok = await this.app.sensors.requestPermission();
+    if (ok) {
+      banner?.classList.add('hidden');
+      this.notify.show('Motion sensors enabled. Tap Record to start capturing.', 'success', 5000);
     }
   }
 

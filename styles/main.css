@@ -418,6 +418,25 @@ select, input[type="range"] {
 
 .drag-over { outline: 2px dashed var(--accent); outline-offset: -4px; }
 
+.sensor-banner {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--status-h) + var(--timeline-h) + 16px);
+  transform: translateX(-50%);
+  z-index: 9000;
+  max-width: min(420px, 92vw);
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  box-shadow: var(--glow);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: stretch;
+  text-align: center;
+}
+.sensor-banner.hidden { display: none; }
+.sensor-banner p { font-size: 13px; line-height: 1.45; }
+
 .fatal-error {
   margin: 40px auto;
   max-width: 480px;

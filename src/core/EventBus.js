@@ -73,7 +73,12 @@ export class EventBus {
           fn(payload, event);
         } catch (err) {
           console.error(`EventBus handler error [${event}]:`, err);
-          this.emit('error', { source: 'EventBus', event, error: err });
+          this.emit('error', {
+            source: 'EventBus',
+            event,
+            message: err instanceof Error ? err.message : String(err),
+            error: err,
+          });
         }
       }
     }

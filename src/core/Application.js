@@ -119,7 +119,10 @@ export class Application {
     this.motion.reset();
     this.motion.setFilter(filter);
     const ok = await this.sensors.start();
-    if (!ok) return;
+    if (!ok) {
+      this.ui.setStatus('Sensor access failed — see notification');
+      return;
+    }
 
     this.recorder.start(rate, this.sensors.availability, filter);
     this._liveMode = true;

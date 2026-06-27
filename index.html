@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta http-equiv="Permissions-Policy" content="accelerometer=(self), gyroscope=(self), magnetometer=(self)">
   <meta name="description" content="Motion Capture Studio — professional IMU motion capture and analysis">
   <title>Motion Capture Studio</title>
   <style>
@@ -426,6 +427,25 @@ select, input[type="range"] {
 
 .drag-over { outline: 2px dashed var(--accent); outline-offset: -4px; }
 
+.sensor-banner {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--status-h) + var(--timeline-h) + 16px);
+  transform: translateX(-50%);
+  z-index: 9000;
+  max-width: min(420px, 92vw);
+  padding: 14px 16px;
+  border-radius: var(--radius);
+  box-shadow: var(--glow);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: stretch;
+  text-align: center;
+}
+.sensor-banner.hidden { display: none; }
+.sensor-banner p { font-size: 13px; line-height: 1.45; }
+
 .fatal-error {
   margin: 40px auto;
   max-width: 480px;
@@ -558,7 +578,12 @@ class EventBus {
           fn(payload, event);
         } catch (err) {
           console.error(`EventBus handler error [${event}]:`, err);
-          this.emit('error', { source: 'EventBus', event, error: err });
+          this.emit('error', {
+            source: 'EventBus',
+            event,
+            message: err instanceof Error ? err.message : String(err),
+            error: err,
+          });
         }
       }
     }
@@ -756,41 +781,160 @@ class SensorManager {
     /** @type {SampleRateHz} */
     this.targetRate = 60;
     this._lastTs = 0;
-    this._interval = null;
     this._latest = null;
+    this._onMotion = null;
+    this._sampleReceived = false;
+    this._watchdog = null;
     this.availability = this._detectAvailability();
   }
 
   _detectAvailability() {
+    const ua = navigator.userAgent || '';
+    const isIOS = /iPad|iPhone|iPod/.test(ua);
+    const isAndroid = /Android/i.test(ua);
     const hasMotion = typeof window !== 'undefined' && 'DeviceMotionEvent' in window;
     const hasOrient = typeof window !== 'undefined' && 'DeviceOrientationEvent' in window;
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const hasRequestMotion = typeof DeviceMotionEvent?.requestPermission === 'function';
+    const hasRequestOrient = typeof DeviceOrientationEvent?.requestPermission === 'function';
+    const secure = typeof window !== 'undefined' && window.isSecureContext;
+
     return {
       accelerometer: hasMotion,
       gyroscope: hasMotion,
       orientation: hasOrient,
-      permissionRequired: isIOS && typeof DeviceMotionEvent?.requestPermission === 'function',
-      browser: navigator.userAgent,
+      permissionRequired: isIOS && (hasRequestMotion || hasRequestOrient),
+      needsMobileEnable: isAndroid || isIOS,
+      isAndroid,
+      isIOS,
+      hasRequestMotion,
+      hasRequestOrient,
+      secure,
+      browser: ua,
       platform: navigator.platform,
     };
   }
 
   /**
-   * Request sensor permissions (iOS).
+   * Query Permissions API where supported (Chrome Android).
+   * @private
+   */
+  async _querySensorPermissions() {
+    if (!navigator.permissions?.query) return { accelerometer: 'unknown', gyroscope: 'unknown' };
+    const states = {};
+    for (const name of ['accelerometer', 'gyroscope']) {
+      try {
+        // @ts-ignore — sensor permission names are not in all TS libs
+        const result = await navigator.permissions.query({ name });
+        states[name] = result.state;
+      } catch {
+        states[name] = 'unknown';
+      }
+    }
+    return states;
+  }
+
+  /**
+   * Request sensor permissions (iOS explicit prompt; Android primes listeners).
    * @returns {Promise<boolean>}
    */
   async requestPermission() {
     try {
-      if (this.availability.permissionRequired) {
-        // @ts-ignore
-        const r = await DeviceMotionEvent.requestPermission();
-        return r === 'granted';
+      if (!this.availability.secure) {
+        this.bus.emit('error', {
+          code: 'INSECURE_CONTEXT',
+          message: 'Motion sensors require HTTPS. Open this app via https:// or localhost.',
+        });
+        return false;
       }
-      return this.availability.accelerometer;
+
+      if (!this.availability.accelerometer) {
+        this.bus.emit('error', {
+          code: 'UNSUPPORTED',
+          message: 'Device motion sensors are not available in this browser.',
+        });
+        return false;
+      }
+
+      // iOS 13+ explicit permission dialog
+      if (this.availability.hasRequestMotion) {
+        // @ts-ignore
+        const motion = await DeviceMotionEvent.requestPermission();
+        if (motion !== 'granted') {
+          this.bus.emit('error', {
+            code: 'PERMISSION_DENIED',
+            message: 'Motion sensor permission was denied. Enable Motion & Orientation Access in Settings → Safari/Chrome.',
+          });
+          return false;
+        }
+      }
+
+      if (this.availability.hasRequestOrient) {
+        try {
+          // @ts-ignore
+          const orient = await DeviceOrientationEvent.requestPermission();
+          if (orient !== 'granted') {
+            this.bus.emit('error', {
+              code: 'PERMISSION_DENIED',
+              message: 'Orientation sensor permission was denied.',
+            });
+            return false;
+          }
+        } catch {
+          // Optional on some devices
+        }
+      }
+
+      if (this._sensorsPrimed) return true;
+
+      const perm = await this._querySensorPermissions();
+      if (perm.accelerometer === 'denied' || perm.gyroscope === 'denied') {
+        this.bus.emit('error', {
+          code: 'PERMISSION_DENIED',
+          message: 'Sensor access is blocked. In Chrome: Site settings → Motion sensors → Allow.',
+        });
+        return false;
+      }
+
+      // Prime Android/Chrome — permission is granted when events flow after a user gesture
+      const primed = await this._primeSensorAccess();
+      if (primed) this._sensorsPrimed = true;
+      return primed;
     } catch (err) {
-      this.bus.emit('error', { code: 'PERMISSION_DENIED', message: 'Sensor permission denied.', error: err });
+      this.bus.emit('error', {
+        code: 'PERMISSION_DENIED',
+        message: err instanceof Error ? err.message : 'Sensor permission request failed.',
+        error: err,
+      });
       return false;
     }
+  }
+
+  /**
+   * Wait briefly for a real motion event after user gesture (Android Chrome).
+   * @returns {Promise<boolean>}
+   * @private
+   */
+  _primeSensorAccess() {
+    return new Promise((resolve) => {
+      let resolved = false;
+      const finish = (ok) => {
+        if (resolved) return;
+        resolved = true;
+        window.removeEventListener('devicemotion', onMotion);
+        clearTimeout(timer);
+        resolve(ok);
+      };
+
+      const onMotion = (e) => {
+        const acc = e.accelerationIncludingGravity ?? e.acceleration;
+        if (acc && (acc.x != null || acc.y != null || acc.z != null)) {
+          finish(true);
+        }
+      };
+
+      window.addEventListener('devicemotion', onMotion, { passive: true });
+      const timer = setTimeout(() => finish(false), 2500);
+    });
   }
 
   /**
@@ -806,24 +950,51 @@ class SensorManager {
    */
   async start() {
     if (!this.availability.accelerometer) {
-      this.bus.emit('error', { code: 'UNSUPPORTED', message: 'Device motion sensors are not available in this browser.' });
+      this.bus.emit('error', {
+        code: 'UNSUPPORTED',
+        message: 'Device motion sensors are not available. Try Chrome on Android, or import a recording on desktop.',
+      });
       return false;
     }
-    const ok = await this.requestPermission();
-    if (!ok) return false;
 
-    this._onMotion = this._onMotion.bind(this);
+    const ok = await this.requestPermission();
+    if (!ok) {
+      this.bus.emit('error', {
+        code: 'SENSOR_NOT_READY',
+        message: this.availability.isAndroid
+          ? 'Could not access motion sensors. Tap Record again, allow sensor access if prompted, and move the phone slightly.'
+          : 'Could not access motion sensors. Check browser permissions and try again.',
+      });
+      return false;
+    }
+
+    this._sampleReceived = false;
+    this._onMotion = this._onMotionHandler.bind(this);
     window.addEventListener('devicemotion', this._onMotion, { passive: true });
     this.active = true;
     this._lastTs = performance.now();
+    this._startWatchdog();
     this.bus.emit('sensors:started');
     return true;
+  }
+
+  _startWatchdog() {
+    clearTimeout(this._watchdog);
+    this._watchdog = setTimeout(() => {
+      if (this.active && !this._sampleReceived) {
+        this.bus.emit('error', {
+          code: 'NO_SENSOR_DATA',
+          message: 'No motion data received. On Android Chrome: tap the lock icon → Site settings → Motion sensors → Allow, then try Record again.',
+        });
+      }
+    }, 3000);
   }
 
   stop() {
     if (!this.active) return;
     window.removeEventListener('devicemotion', this._onMotion);
     this.active = false;
+    clearTimeout(this._watchdog);
     this.bus.emit('sensors:stopped');
   }
 
@@ -831,14 +1002,19 @@ class SensorManager {
    * @param {DeviceMotionEvent} e
    * @private
    */
-  _onMotion(e) {
+  _onMotionHandler(e) {
     const now = performance.now();
     const dt = this._lastTs ? (now - this._lastTs) / 1000 : 1 / this.targetRate;
     this._lastTs = now;
 
     const acc = e.accelerationIncludingGravity ?? e.acceleration;
     const rot = e.rotationRate;
-    if (!acc) return;
+
+    if (!acc || (acc.x == null && acc.y == null && acc.z == null)) {
+      return;
+    }
+
+    this._sampleReceived = true;
 
     const GRAVITY_MS2 = 9.80665;
     const accel = {
@@ -852,17 +1028,12 @@ class SensorManager {
       z: ((rot?.gamma ?? 0) * Math.PI) / 180,
     };
 
-    let orientation = null;
-    if (e.absolute && typeof e.alpha === 'number') {
-      // Some browsers expose orientation on motion event
-    }
-
     const sample = {
       timestamp: now,
       dt: Math.max(dt, 1e-6),
       accel,
       gyro,
-      orientation,
+      orientation: null,
       raw: { accel: { ...accel }, gyro: { ...gyro } },
     };
     this._latest = sample;
@@ -3573,255 +3744,35 @@ CalibrationWizard;
 
 
 /**
- * JSON recording format import/export.
- * @module io/JsonFormat
+ * Format errors and event payloads for user-visible messages.
+ * @module utils/formatError
  */
-
-const JSON_MAGIC = 'MCS_JSON';
 
 /**
- * @param {{ metadata: Object, samples: Array }} recording
- * @returns {Blob}
+ * @param {unknown} err
+ * @returns {string}
  */
-function exportJson(recording) {
-  const payload = {
-    magic: JSON_MAGIC,
-    ...recording,
-  };
-  return new Blob([JSON.stringify(payload)], { type: 'application/json' });
-}
-
-/**
- * @param {string} text
- * @returns {{ metadata: Object, samples: Array }}
- */
-function importJson(text) {
-  const data = JSON.parse(text);
-  if (!data.samples || !Array.isArray(data.samples)) {
-    throw new Error('Invalid JSON recording: missing samples array.');
-  }
-  return { metadata: data.metadata ?? {}, samples: data.samples };
-}
-
-{ exportJson, importJson };
-
-
-/**
- * CRC-32 integrity checking for binary recordings.
- * @module utils/crc32
- */
-
-/** @type {Uint32Array} */
-const TABLE = (() => {
-  const t = new Uint32Array(256);
-  for (let i = 0; i < 256; i++) {
-    let c = i;
-    for (let k = 0; k < 8; k++) {
-      c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+function formatError(err) {
+  if (err == null) return 'Unknown error';
+  if (typeof err === 'string') return err;
+  if (err instanceof Error) return err.message || 'An error occurred';
+  if (typeof err === 'object') {
+    const o = /** @type {Record<string, unknown>} */ (err);
+    if (typeof o.message === 'string' && o.message) {
+      return typeof o.code === 'string' ? `${o.message} (${o.code})` : o.message;
     }
-    t[i] = c >>> 0;
-  }
-  return t;
-})();
-
-/**
- * Compute CRC-32 over byte array.
- * @param {Uint8Array} data
- * @param {number} [seed=0xffffffff]
- * @returns {number}
- */
-function crc32(data, seed = 0xffffffff) {
-  let crc = seed;
-  for (let i = 0; i < data.length; i++) {
-    crc = TABLE[(crc ^ data[i]) & 0xff] ^ (crc >>> 8);
-  }
-  return (crc ^ 0xffffffff) >>> 0;
-}
-
-crc32;
-
-
-/**
- * Compressed binary recording format with CRC and chunk structure.
- * @module io/BinaryFormat
- */
-
-
-const MAGIC = 0x4D435300; // 'MCS\0'
-const VERSION = 1;
-const CHUNK_META = 0x4D455441; // 'META'
-const CHUNK_DATA = 0x44415441; // 'DATA'
-
-/**
- * Encode recording to compressed binary blob.
- * @param {{ metadata: Object, samples: Array }} recording
- * @returns {Promise<Blob>}
- */
-export async function exportBinary(recording) {
-  const metaBytes = new TextEncoder().encode(JSON.stringify(recording.metadata));
-  const n = recording.samples.length;
-  const dataSize = n * 16 * 4; // 16 floats per sample
-  const buf = new ArrayBuffer(32 + metaBytes.length + 12 + dataSize + 4);
-  const view = new DataView(buf);
-  let off = 0;
-
-  view.setUint32(off, MAGIC, true); off += 4;
-  view.setUint16(off, VERSION, true); off += 2;
-  view.setUint16(off, 0, true); off += 2; // flags — reserved for gzip/LZ4
-  view.setUint32(off, n, true); off += 4;
-  view.setFloat64(off, recording.samples[0]?.timestamp ?? 0, true); off += 8;
-
-  // META chunk
-  view.setUint32(off, CHUNK_META, true); off += 4;
-  view.setUint32(off, metaBytes.length, true); off += 4;
-  new Uint8Array(buf, off, metaBytes.length).set(metaBytes);
-  off += metaBytes.length;
-
-  // DATA chunk — packed floats: ts, dt, ax,ay,az, gx,gy,gz, qw,qx,qy,qz, px,py,pz, dist
-  view.setUint32(off, CHUNK_DATA, true); off += 4;
-  view.setUint32(off, dataSize, true); off += 4;
-  for (let i = 0; i < n; i++) {
-    const s = recording.samples[i];
-    const p = s.processed;
-    view.setFloat32(off, s.timestamp, true); off += 4;
-    view.setFloat32(off, s.dt, true); off += 4;
-    view.setFloat32(off, s.accel.x, true); off += 4;
-    view.setFloat32(off, s.accel.y, true); off += 4;
-    view.setFloat32(off, s.accel.z, true); off += 4;
-    view.setFloat32(off, s.gyro.x, true); off += 4;
-    view.setFloat32(off, s.gyro.y, true); off += 4;
-    view.setFloat32(off, s.gyro.z, true); off += 4;
-    const q = p?.quaternion ?? { w: 1, x: 0, y: 0, z: 0 };
-    view.setFloat32(off, q.w, true); off += 4;
-    view.setFloat32(off, q.x, true); off += 4;
-    view.setFloat32(off, q.y, true); off += 4;
-    view.setFloat32(off, q.z, true); off += 4;
-    const pos = p?.position ?? { x: 0, y: 0, z: 0 };
-    view.setFloat32(off, pos.x, true); off += 4;
-    view.setFloat32(off, pos.y, true); off += 4;
-    view.setFloat32(off, pos.z, true); off += 4;
-    view.setFloat32(off, p?.distance ?? 0, true); off += 4;
-  }
-
-  const body = new Uint8Array(buf, 0, off);
-  const checksum = crc32(body);
-  const finalBuf = new ArrayBuffer(off + 4);
-  new Uint8Array(finalBuf).set(body);
-  new DataView(finalBuf).setUint32(off, checksum, true);
-
-  return new Blob([finalBuf], { type: 'application/octet-stream' });
-}
-
-/**
- * @param {ArrayBuffer} buffer
- * @returns {Promise<{ metadata: Object, samples: Array }>}
- */
-export async function importBinary(buffer) {
-  const view = new DataView(buffer);
-  if (view.byteLength < 20) throw new Error('File too small to be a valid MCS binary recording.');
-
-  const magic = view.getUint32(0, true);
-  if (magic !== MAGIC) throw new Error('Unknown binary format (invalid magic).');
-
-  const version = view.getUint16(4, true);
-  if (version > VERSION) throw new Error(`Unsupported binary version: ${version}`);
-
-  const checksumStored = view.getUint32(buffer.byteLength - 4, true);
-  const body = new Uint8Array(buffer, 0, buffer.byteLength - 4);
-  if (crc32(body) !== checksumStored) throw new Error('Corrupt file: CRC mismatch.');
-
-  const sampleCount = view.getUint32(8, true);
-  let off = 20;
-  let metadata = {};
-
-  while (off < buffer.byteLength - 4) {
-    const chunkId = view.getUint32(off, true); off += 4;
-    const chunkLen = view.getUint32(off, true); off += 4;
-    if (chunkId === CHUNK_META) {
-      metadata = JSON.parse(new TextDecoder().decode(new Uint8Array(buffer, off, chunkLen)));
-      off += chunkLen;
-    } else if (chunkId === CHUNK_DATA) {
-      const samples = [];
-      const floatsPer = 16;
-      for (let i = 0; i < sampleCount; i++) {
-        const base = off + i * floatsPer * 4;
-        const ts = view.getFloat32(base, true);
-        const dt = view.getFloat32(base + 4, true);
-        const accel = { x: view.getFloat32(base + 8, true), y: view.getFloat32(base + 12, true), z: view.getFloat32(base + 16, true) };
-        const gyro = { x: view.getFloat32(base + 20, true), y: view.getFloat32(base + 24, true), z: view.getFloat32(base + 28, true) };
-        const q = { w: view.getFloat32(base + 32, true), x: view.getFloat32(base + 36, true), y: view.getFloat32(base + 40, true), z: view.getFloat32(base + 44, true) };
-        const pos = { x: view.getFloat32(base + 48, true), y: view.getFloat32(base + 52, true), z: view.getFloat32(base + 56, true) };
-        const dist = view.getFloat32(base + 60, true);
-        samples.push({
-          timestamp: ts, dt, accel, gyro,
-          processed: { position: pos, quaternion: q, distance: dist, velocity: { x: 0, y: 0, z: 0 }, euler: { x: 0, y: 0, z: 0 }, linearAccel: accel, rotationSpeed: 0, gForce: 0 },
-        });
-      }
-      return { metadata, samples };
-    } else {
-      off += chunkLen;
-    }
-  }
-  throw new Error('Invalid binary file: missing DATA chunk.');
-}
-
-{ exportBinary, importBinary };
-
-
-/**
- * Unified import/export with format auto-detection.
- * @module io/ImportExport
- */
-
-
-/**
- * @param {{ metadata: Object, samples: Array }} recording
- * @param {'json'|'binary'} format
- * @returns {Promise<Blob>}
- */
-export async function exportRecording(recording, format) {
-  if (format === 'binary') return exportBinary(recording);
-  return exportJson(recording);
-}
-
-/**
- * @param {File|Blob} file
- * @returns {Promise<{ metadata: Object, samples: Array }>}
- */
-export async function importRecording(file) {
-  const name = file.name?.toLowerCase() ?? '';
-  if (name.endsWith('.json')) {
-    const text = await file.text();
-    return importJson(text);
-  }
-  if (name.endsWith('.mcs') || name.endsWith('.bin')) {
-    return importBinary(await file.arrayBuffer());
-  }
-
-  // Auto-detect
-  const buf = await file.arrayBuffer();
-  const view = new DataView(buf);
-  if (buf.byteLength >= 4 && view.getUint32(0, true) === 0x4D435300) {
-    return importBinary(buf);
+    if (o.error instanceof Error) return o.error.message;
+    if (typeof o.error === 'string') return o.error;
+    if (typeof o.code === 'string') return o.code.replace(/_/g, ' ').toLowerCase();
   }
   try {
-    return importJson(new TextDecoder().decode(buf));
+    return JSON.stringify(err);
   } catch {
-    throw new Error('Unable to detect file format. Use .json or .mcs files.');
+    return String(err);
   }
 }
 
-/**
- * Suggested filename for export.
- * @param {string} name
- * @param {'json'|'binary'} format
- */
-function suggestFilename(name, format) {
-  const safe = name.replace(/[^\w\- ]+/g, '').trim() || 'recording';
-  return format === 'binary' ? `${safe}.mcs` : `${safe}.json`;
-}
-
-{ exportRecording, importRecording, suggestFilename };
+formatError;
 
 
 /**
@@ -3858,6 +3809,7 @@ class UIManager {
     this._registerCommands();
     this._registerShortcuts();
     this._setupDropZone();
+    this._setupMobileSensorBanner();
     this.resize();
     window.addEventListener('resize', () => this.resize());
   }
@@ -3945,6 +3897,10 @@ class UIManager {
         <span id="status-right">FPS — | Samples —</span>
       </footer>
       <div id="loading" class="loading-overlay hidden"><div class="spinner"></div><p>Loading…</p></div>
+      <div id="sensor-banner" class="sensor-banner glass hidden">
+        <p><strong>Motion sensors required</strong> — Tap Enable, then allow sensor access when prompted.</p>
+        <button class="tb-btn accent" type="button" data-action="enable-sensors">Enable Sensors</button>
+      </div>
       <input type="file" id="file-input" accept=".json,.mcs,.bin" hidden>
     `;
 
@@ -4074,7 +4030,7 @@ class UIManager {
     bus.on('timeline:seek', (t) => app.playback.seek(t));
     bus.on('recording:loaded', () => this._onRecordingLoaded());
     bus.on('renderer:stats', (s) => this._updateStatus(s));
-    bus.on('error', (err) => this.notify.show(err.message ?? String(err), 'error', 6000));
+    bus.on('error', (err) => this.notify.show(formatError(err), 'error', 8000));
     bus.on('calibration:open', (step) => this._showCalibration(step));
   }
 
@@ -4101,6 +4057,7 @@ class UIManager {
       case 'next-frame': app.playback.nextFrame(); break;
       case 'reset-camera': app.renderer.cameraCtrl.reset(); break;
       case 'screenshot': this._screenshot(); break;
+      case 'enable-sensors': this._enableSensors(); break;
       default: break;
     }
   }
@@ -4124,6 +4081,22 @@ class UIManager {
       this.notify.show(err.message, 'error');
     } finally {
       this.showLoading(false);
+    }
+  }
+
+  _setupMobileSensorBanner() {
+    const banner = document.getElementById('sensor-banner');
+    const av = this.app.sensors.availability;
+    if (!banner || !av.needsMobileEnable || !av.accelerometer) return;
+    banner.classList.remove('hidden');
+  }
+
+  async _enableSensors() {
+    const banner = document.getElementById('sensor-banner');
+    const ok = await this.app.sensors.requestPermission();
+    if (ok) {
+      banner?.classList.add('hidden');
+      this.notify.show('Motion sensors enabled. Tap Record to start capturing.', 'success', 5000);
     }
   }
 
@@ -4414,7 +4387,10 @@ class Application {
     this.motion.reset();
     this.motion.setFilter(filter);
     const ok = await this.sensors.start();
-    if (!ok) return;
+    if (!ok) {
+      this.ui.setStatus('Sensor access failed — see notification');
+      return;
+    }
 
     this.recorder.start(rate, this.sensors.availability, filter);
     this._liveMode = true;
