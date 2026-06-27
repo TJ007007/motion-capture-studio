@@ -162,12 +162,14 @@ select, input[type="range"] {
   min-width: 0;
   min-height: 0;
 }
-#viewport {
+#viewport,
+#mcs-viewport {
   width: 100%;
   height: 100%;
   min-height: 200px;
 }
-#viewport canvas { display: block; width: 100% !important; height: 100% !important; }
+#viewport canvas,
+#mcs-viewport canvas { display: block; width: 100% !important; height: 100% !important; }
 
 .viewport-overlay {
   position: absolute;
@@ -479,6 +481,8 @@ select, input[type="range"] {
 }
 </script>
   <script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 /**
  * Central publish/subscribe event dispatcher for decoupled subsystems.
  * @module core/EventBus
@@ -3837,6 +3841,8 @@ class UIManager {
     this.app = app;
     this.bus = app.bus;
     this.root = document.getElementById('app');
+    if (!this.root) throw new Error('App container #app not found.');
+    this.viewportEl = null;
     this._buildShell();
     this.notify = new NotificationManager(document.getElementById('toasts'));
     this.palette = new CommandPalette(document.getElementById('cmd-palette'), this.bus);
@@ -3899,7 +3905,7 @@ class UIManager {
           <div class="resize-handle" data-resize="#file-panel" data-side="left"></div>
         </aside>
         <section class="viewport-wrap">
-          <div id="viewport"></div>
+          <div id="mcs-viewport"></div>
           <div class="viewport-overlay">
             <select id="camera-mode" title="Camera mode">
               <option value="orbit">Orbit</option>
@@ -3941,6 +3947,9 @@ class UIManager {
       <div id="loading" class="loading-overlay hidden"><div class="spinner"></div><p>Loading…</p></div>
       <input type="file" id="file-input" accept=".json,.mcs,.bin" hidden>
     `;
+
+    this.viewportEl = document.getElementById('mcs-viewport');
+    if (!this.viewportEl) throw new Error('3D viewport element was not created.');
 
     document.getElementById('cmd-palette')?.remove();
     const palette = document.createElement('div');
@@ -4324,7 +4333,7 @@ class Application {
   async init() {
     this.ui = new UIManager(this);
 
-    const viewport = document.getElementById('viewport');
+    const viewport = this.ui.viewportEl;
     if (!viewport) throw new Error('Viewport element not found.');
 
     this.renderer = new SceneRenderer(viewport, this.bus);

@@ -25,6 +25,8 @@ export class UIManager {
     this.app = app;
     this.bus = app.bus;
     this.root = document.getElementById('app');
+    if (!this.root) throw new Error('App container #app not found.');
+    this.viewportEl = null;
     this._buildShell();
     this.notify = new NotificationManager(document.getElementById('toasts'));
     this.palette = new CommandPalette(document.getElementById('cmd-palette'), this.bus);
@@ -87,7 +89,7 @@ export class UIManager {
           <div class="resize-handle" data-resize="#file-panel" data-side="left"></div>
         </aside>
         <section class="viewport-wrap">
-          <div id="viewport"></div>
+          <div id="mcs-viewport"></div>
           <div class="viewport-overlay">
             <select id="camera-mode" title="Camera mode">
               <option value="orbit">Orbit</option>
@@ -129,6 +131,9 @@ export class UIManager {
       <div id="loading" class="loading-overlay hidden"><div class="spinner"></div><p>Loading…</p></div>
       <input type="file" id="file-input" accept=".json,.mcs,.bin" hidden>
     `;
+
+    this.viewportEl = document.getElementById('mcs-viewport');
+    if (!this.viewportEl) throw new Error('3D viewport element was not created.');
 
     document.getElementById('cmd-palette')?.remove();
     const palette = document.createElement('div');

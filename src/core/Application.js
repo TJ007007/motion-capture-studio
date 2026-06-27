@@ -38,7 +38,7 @@ export class Application {
   async init() {
     this.ui = new UIManager(this);
 
-    const viewport = document.getElementById('viewport');
+    const viewport = this.ui.viewportEl;
     if (!viewport) throw new Error('Viewport element not found.');
 
     this.renderer = new SceneRenderer(viewport, this.bus);

@@ -18,6 +18,8 @@ const OUT = path.join(ROOT, 'index.html');
 
 /** @type {Set<string>} */
 const visited = new Set();
+/** @type {Set<string>} */
+const externalImportLines = new Set();
 
 /**
  * Resolve a module path relative to importer.
@@ -38,12 +40,11 @@ function resolveLocal(importerDir, specifier) {
 }
 
 /**
- * Strip import/export and collect external imports.
+ * Strip import/export and preserve external import statements for the bundle header.
  * @param {string} code
- * @param {Set<string>} externals
  * @returns {string}
  */
-function transformModule(code, externals) {
+function transformModule(code) {
   const lines = code.split('\n');
   const out = [];
   for (const line of lines) {
@@ -51,7 +52,7 @@ function transformModule(code, externals) {
     if (/^import\s+/.test(trimmed)) {
       const m = trimmed.match(/^import\s+(?:[\s\S]*?\s+from\s+)?['"]([^'"]+)['"]/);
       if (m && !m[1].startsWith('.')) {
-        externals.add(m[1]);
+        externalImportLines.add(trimmed.endsWith(';') ? trimmed : `${trimmed};`);
       }
       continue;
     }
@@ -71,10 +72,9 @@ function transformModule(code, externals) {
 /**
  * Recursively bundle a module entry point.
  * @param {string} filePath
- * @param {Set<string>} externals
  * @returns {string}
  */
-function bundleModule(filePath, externals) {
+function bundleModule(filePath) {
   const normalized = path.normalize(filePath);
   if (visited.has(normalized)) return '';
   visited.add(normalized);
@@ -89,25 +89,24 @@ function bundleModule(filePath, externals) {
     const spec = match[1];
     if (spec.startsWith('.')) {
       localImports.push({ spec, resolved: resolveLocal(dir, spec) });
-    } else {
-      externals.add(spec);
     }
   }
 
   let bundled = '';
   for (const imp of localImports) {
     if (imp.resolved) {
-      bundled += bundleModule(imp.resolved, externals) + '\n';
+      bundled += bundleModule(imp.resolved) + '\n';
     }
   }
-  bundled += transformModule(code, externals) + '\n';
+  bundled += transformModule(code) + '\n';
   return bundled;
 }
 
 function build() {
   visited.clear();
-  const externals = new Set();
-  const jsBundle = bundleModule(path.join(SRC, 'main.js'), externals);
+  externalImportLines.clear();
+  const jsBody = bundleModule(path.join(SRC, 'main.js'));
+  const jsBundle = `${[...externalImportLines].join('\n')}\n${jsBody}`;
   const css = fs.readFileSync(STYLES, 'utf8');
   let html = fs.readFileSync(TEMPLATE, 'utf8');
 
@@ -125,7 +124,7 @@ function build() {
 
   fs.writeFileSync(OUT, html, 'utf8');
   console.log(`Built ${OUT} (${(html.length / 1024).toFixed(1)} KB)`);
-  console.log(`External imports: ${[...externals].join(', ')}`);
+  console.log(`External imports: ${[...externalImportLines].join(' | ')}`);
 }
 
 build();
